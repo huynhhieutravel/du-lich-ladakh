@@ -1,0 +1,943 @@
+/* ==========================================================================
+   TOUR LANDING PAGE - Design System
+   ==========================================================================
+   File:    src/styles/tour-landing.css
+   Scope:   .elementor-tour-wrapper (wrapper class on tour/[slug].astro)
+   Purpose: CSS dành riêng cho các trang Tour Landing Page (2-column layout).
+            KHÔNG phụ thuộc Tailwind, KHÔNG ảnh hưởng global.
+            Tất cả rule đều scoped dưới .elementor-tour-wrapper.
+   
+   Quy tắc vàng:
+   ─────────────
+   1. MỌI selector PHẢI bắt đầu bằng .elementor-tour-wrapper
+   2. KHÔNG ĐƯỢC sử dụng Tailwind @apply — file này là Vanilla CSS
+   3. KHÔNG ĐƯỢC dùng !important trừ text-decoration cho links
+   4. Mọi màu sắc PHẢI đạt WCAG AA contrast ratio (≥ 4.5:1)
+   
+   Color Palette (WCAG-compliant):
+   ─────────────────────────────────
+   --tour-brand:        #9a3412  (brand-800, ratio 7.1:1 on white)
+   --tour-brand-accent: #ea580c  (brand-500, dùng cho icon/border, KHÔNG cho text)
+   --tour-text-primary: #1e293b  (slate-800)
+   --tour-text-body:    #475569  (slate-600, ratio 5.9:1)
+   --tour-text-muted:   #64748b  (slate-500, ratio 4.6:1)
+   --tour-text-meta:    #6b7280  (gray-500, ratio 4.6:1)
+   --tour-bg-card:      #ffffff
+   --tour-bg-hover:     #f8fafc
+   --tour-border:       #e2e8f0
+   --tour-shadow:       0 4px 15px rgba(0,0,0,0.02)
+   ========================================================================== */
+
+/* --------------------------------------------------
+   1. CTA BAR (Top floating bar with Zalo/Messenger)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .premium-cta-bar {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+  border: 1px solid rgba(0,0,0,0.04);
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 40px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.elementor-tour-wrapper .cta-title {
+  font-weight: 800;
+  color: #1e293b;
+  font-size: 1.125rem;
+}
+.elementor-tour-wrapper .cta-links {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.elementor-tour-wrapper .social-btn {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none !important;
+  transition: all 0.3s ease;
+}
+.elementor-tour-wrapper .social-icon-wrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+.elementor-tour-wrapper .social-btn.zalo .social-icon-wrapper {
+  background: rgba(0, 104, 255, 0.1);
+  color: #0068FF;
+}
+.elementor-tour-wrapper .social-btn.zalo:hover .social-icon-wrapper {
+  background: #0068FF;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 104, 255, 0.3);
+}
+.elementor-tour-wrapper .social-btn.msg .social-icon-wrapper {
+  background: rgba(0, 119, 204, 0.1);
+  color: #0077CC;
+}
+.elementor-tour-wrapper .social-btn.msg:hover .social-icon-wrapper {
+  background: #0077CC;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 119, 204, 0.3);
+}
+.elementor-tour-wrapper .social-text {
+  display: flex;
+  flex-direction: column;
+}
+.elementor-tour-wrapper .social-name {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 15px;
+  line-height: 1.2;
+}
+.elementor-tour-wrapper .social-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin-top: 2px;
+}
+.elementor-tour-wrapper .cta-form-btn {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #9a3412;
+  font-weight: 700;
+  padding: 10px 24px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none !important;
+  transition: all 0.3s ease;
+}
+.elementor-tour-wrapper .cta-form-btn:hover {
+  background: #9a3412;
+  color: #ffffff;
+  border-color: #9a3412;
+}
+
+@media (max-width: 768px) {
+  .elementor-tour-wrapper .premium-cta-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .elementor-tour-wrapper .cta-links {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .elementor-tour-wrapper .cta-form-btn {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* --------------------------------------------------
+   2. SIDEBAR PRICE CARD (Sticky right column)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .sticky-price-card {
+  background: #ffffff;
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.08);
+  border: 1px solid rgba(0,0,0,0.03);
+  padding: 32px;
+}
+.elementor-tour-wrapper .service-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  border-bottom: 1px solid #f1f5f9;
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+}
+.elementor-tour-wrapper .service-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.elementor-tour-wrapper .service-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #fff7ed;
+  color: #ea580c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+.elementor-tour-wrapper .service-title {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 15px;
+  margin-bottom: 4px;
+}
+.elementor-tour-wrapper .service-sub {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+.elementor-tour-wrapper .price-label {
+  font-size: 14px;
+  color: #64748b;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+.elementor-tour-wrapper .price-amount {
+  font-size: clamp(22px, 2vw, 32px);
+  font-weight: 900;
+  color: #1e293b;
+  line-height: 1;
+  letter-spacing: -1px;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------
+   3. ACTION BUTTONS (Zalo, Messenger, Outline)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.elementor-tour-wrapper .btn-primary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 8px;
+  border-radius: 12px;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 15px;
+  white-space: nowrap;
+  text-decoration: none !important;
+  transition: all 0.3s ease;
+  gap: 6px;
+}
+.elementor-tour-wrapper .btn-zalo {
+  background: #0068FF;
+  box-shadow: 0 4px 14px rgba(0, 104, 255, 0.25);
+}
+.elementor-tour-wrapper .btn-zalo:hover {
+  background: #0056d6;
+  transform: translateY(-2px);
+}
+.elementor-tour-wrapper .btn-msg {
+  background: #0077CC;
+  box-shadow: 0 4px 14px rgba(0, 119, 204, 0.25);
+}
+.elementor-tour-wrapper .btn-msg:hover {
+  background: #005fa3;
+  transform: translateY(-2px);
+}
+.elementor-tour-wrapper .btn-outline {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 14px;
+  border-radius: 12px;
+  border: 2px solid #9a3412;
+  color: #9a3412;
+  font-weight: 800;
+  font-size: 15px;
+  text-decoration: none !important;
+  transition: all 0.3s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.elementor-tour-wrapper .btn-outline:hover {
+  background: #9a3412;
+  color: #ffffff;
+}
+
+/* --------------------------------------------------
+   4. HIGHLIGHTS SECTION (Checkmark list)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .highlight-list-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+.elementor-tour-wrapper .highlight-icon {
+  flex-shrink: 0;
+  color: #ea580c;
+  margin-top: 2px;
+}
+.elementor-tour-wrapper .highlight-text {
+  color: #334155;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+/* --------------------------------------------------
+   5. QR CODE BOX
+   -------------------------------------------------- */
+.elementor-tour-wrapper .premium-qr-box {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: #ffffff;
+  padding: 16px 24px;
+  border-radius: 16px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+  border: 1px solid rgba(0,0,0,0.05);
+  margin: 32px 0;
+  max-width: 400px;
+}
+.elementor-tour-wrapper .qr-wrapper {
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #f1f5f9;
+  padding: 4px;
+  background: #fff;
+}
+.elementor-tour-wrapper .qr-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.elementor-tour-wrapper .qr-title {
+  font-weight: 800;
+  color: #1e293b;
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+.elementor-tour-wrapper .qr-desc {
+  font-size: 14px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* --------------------------------------------------
+   6. QUOTE BOX (Emotional/Editorial)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .premium-quote-box {
+  position: relative;
+  margin: 48px 0;
+  padding: 32px 40px;
+  background: linear-gradient(145deg, #fff7ed, #ffffff);
+  border-left: 4px solid #ea580c;
+  border-radius: 0 24px 24px 0;
+  box-shadow: 0 10px 30px rgba(234, 88, 12, 0.05);
+}
+.elementor-tour-wrapper .quote-icon {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  width: 32px;
+  height: 32px;
+  color: #ea580c;
+  opacity: 0.15;
+}
+.elementor-tour-wrapper .quote-text {
+  font-size: 20px;
+  font-style: italic;
+  color: #431407;
+  font-family: Georgia, serif;
+  line-height: 1.7;
+  margin: 0;
+  position: relative;
+  z-index: 2;
+  font-weight: 500;
+}
+
+/* --------------------------------------------------
+   7. ITINERARY ACCORDION (Premium Timeline)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .premium-itinerary-item {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+  transition: all 0.3s ease;
+}
+.elementor-tour-wrapper .premium-itinerary-item:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+}
+.elementor-tour-wrapper .premium-itinerary-summary {
+  display: flex;
+  align-items: center;
+  padding: 18px 24px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 17px;
+  background: #ffffff;
+  transition: background 0.3s;
+}
+.elementor-tour-wrapper .premium-itinerary-summary:hover {
+  background: #f8fafc;
+}
+.elementor-tour-wrapper .premium-itinerary-summary::-webkit-details-marker {
+  display: none;
+}
+.elementor-tour-wrapper .itinerary-toggle-icon {
+  margin-right: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: #ea580c;
+  color: #ffffff;
+  border-radius: 50%;
+  font-size: 20px;
+  line-height: 1;
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s;
+}
+.elementor-tour-wrapper .premium-itinerary-item[open] .itinerary-toggle-icon {
+  transform: rotate(45deg);
+  background: #ef4444;
+}
+.elementor-tour-wrapper .premium-itinerary-content {
+  padding: 20px 24px 24px 24px;
+  color: #475569;
+  line-height: 1.7;
+  font-size: 15px;
+  border-top: 1px solid #f1f5f9;
+}
+.elementor-tour-wrapper .premium-itinerary-content ul {
+  list-style-type: disc;
+  padding-left: 20px;
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.elementor-tour-wrapper .premium-itinerary-content p {
+  margin-bottom: 16px;
+}
+.elementor-tour-wrapper .premium-itinerary-content p:last-child {
+  margin-bottom: 0;
+}
+
+@media (max-width: 768px) {
+  .elementor-tour-wrapper .premium-itinerary-summary {
+    padding: 16px;
+    font-size: 16px;
+  }
+  .elementor-tour-wrapper .itinerary-toggle-icon {
+    margin-right: 12px;
+    width: 28px;
+    height: 28px;
+    font-size: 18px;
+  }
+  .elementor-tour-wrapper .premium-itinerary-content {
+    padding: 16px 16px 20px 16px;
+    font-size: 14.5px;
+  }
+}
+
+/* Unfold content paragraph spacing */
+.elementor-tour-wrapper .unfold-content .custom-blog-prose p {
+  margin-bottom: 20px;
+  line-height: 1.75;
+}
+.elementor-tour-wrapper .unfold-content .custom-blog-prose p:last-child {
+  margin-bottom: 0;
+}
+
+/* --------------------------------------------------
+   8. FAQ ACCORDION (Thông tin thêm)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .tour-faq-wrapper details {
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+  transition: all 0.3s ease;
+}
+.elementor-tour-wrapper .tour-faq-wrapper details:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 8px 25px rgba(0,0,0,0.05);
+}
+.elementor-tour-wrapper .tour-faq-wrapper summary {
+  display: flex;
+  align-items: center;
+  padding: 20px 24px;
+  cursor: pointer;
+  list-style: none;
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 17px;
+  background: #ffffff;
+  transition: background 0.3s;
+}
+.elementor-tour-wrapper .tour-faq-wrapper summary::-webkit-details-marker {
+  display: none;
+}
+.elementor-tour-wrapper .tour-faq-wrapper summary:hover {
+  background: #f8fafc;
+}
+.elementor-tour-wrapper .tour-faq-wrapper summary svg:first-child {
+  margin-right: 16px;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+}
+.elementor-tour-wrapper .faq-toggle-icon {
+  margin-left: auto;
+  color: #94a3b8;
+  font-size: 28px;
+  line-height: 1;
+  transition: transform 0.3s ease;
+  font-weight: 400;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.elementor-tour-wrapper .tour-faq-wrapper details[open] .faq-toggle-icon {
+  transform: rotate(45deg);
+  color: #ef4444;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content {
+  padding: 24px 24px 24px 56px;
+  color: #475569;
+  font-size: 15px;
+  line-height: 1.7;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content p {
+  margin-bottom: 16px !important;
+  line-height: 1.7 !important;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content p:last-child {
+  margin-bottom: 0 !important;
+}
+/* Bold text in paragraphs retains natural inline flow */
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content p > strong:only-child,
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content p > b:only-child {
+  color: #1e293b !important;
+  font-weight: 700 !important;
+}
+/* Nested ul inside li (e.g. "Bao Gồm" with sub-items) */
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ul ul,
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ol ul {
+  margin-top: 6px;
+  margin-bottom: 4px;
+}
+/* Tables inside FAQ (e.g. "Bao Gồm" 2-column layout) */
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8px 0 16px 0;
+  font-size: 15px;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #475569;
+  line-height: 1.6;
+  vertical-align: top;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content table td:first-child {
+  font-weight: 600;
+  color: #334155;
+  width: 55%;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content table tr:last-child td {
+  border-bottom: none;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content table p {
+  margin: 0;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content-spaced > * {
+  margin-bottom: 16px;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content-spaced > *:last-child {
+  margin-bottom: 0;
+}
+
+/* --------------------------------------------------
+   0. RESPONSIVE GRID SYSTEM
+   -------------------------------------------------- */
+.elementor-tour-wrapper .tour-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+  position: relative;
+  align-items: flex-start;
+}
+.elementor-tour-wrapper .tour-main-col {
+  order: 2;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.elementor-tour-wrapper .tour-sidebar-col {
+  order: 1;
+  width: 100%;
+  position: relative;
+}
+.elementor-tour-wrapper .mobile-image {
+  display: block;
+  margin-bottom: 24px;
+}
+.elementor-tour-wrapper .desktop-image {
+  display: none;
+}
+
+@media (min-width: 1024px) {
+  .elementor-tour-wrapper .tour-grid-container {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: 56px;
+  }
+  .elementor-tour-wrapper .tour-main-col {
+    grid-column: span 8 / span 8;
+    order: 1;
+  }
+  .elementor-tour-wrapper .tour-sidebar-col {
+    grid-column: span 4 / span 4;
+    order: 2;
+  }
+  .elementor-tour-wrapper .mobile-image {
+    display: none;
+  }
+  .elementor-tour-wrapper .desktop-image {
+    display: block;
+    margin-bottom: 32px;
+  }
+}
+
+/* --------------------------------------------------
+   9. PREMIUM UNFOLD COMPONENT
+   -------------------------------------------------- */
+.elementor-tour-wrapper .tour-unfold-box {
+  padding: 1.5rem;
+  background-color: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 1rem;
+  margin-bottom: 2rem;
+}
+
+.elementor-tour-wrapper .unfold-checkbox { display: none; }
+.elementor-tour-wrapper .unfold-content { max-height: 140px; overflow: hidden; position: relative; transition: max-height 0.5s ease; }
+.elementor-tour-wrapper .unfold-overlay { position: absolute; bottom: 0; left: 0; right: 0; height: 80px; background: linear-gradient(to top, rgba(248,250,252,1), rgba(248,250,252,0)); pointer-events: none; transition: opacity 0.3s ease; }
+.elementor-tour-wrapper .unfold-checkbox:checked ~ .unfold-content { max-height: 2000px; }
+.elementor-tour-wrapper .unfold-checkbox:checked ~ .unfold-content .unfold-overlay { opacity: 0; }
+.elementor-tour-wrapper .unfold-btn { display: inline-flex; align-items: center; justify-content: center; padding: 8px 24px; border: 1px solid #d1d5db; background: #fff; cursor: pointer; font-size: 13px; font-weight: 600; color: #374151; text-transform: uppercase; letter-spacing: 0.05em; transition: all 0.3s ease; border-radius: 9999px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+.elementor-tour-wrapper .unfold-btn:hover { background: #f9fafb; }
+.elementor-tour-wrapper .unfold-btn .btn-text-show { display: inline; }
+.elementor-tour-wrapper .unfold-btn .btn-text-hide { display: none; }
+.elementor-tour-wrapper .unfold-checkbox:checked ~ .unfold-btn-wrapper .unfold-btn .btn-text-show { display: none; }
+.elementor-tour-wrapper .unfold-checkbox:checked ~ .unfold-btn-wrapper .unfold-btn .btn-text-hide { display: inline; }
+.elementor-tour-wrapper .unfold-checkbox:checked ~ .unfold-btn-wrapper .unfold-btn svg { transform: rotate(180deg); }
+
+/* --------------------------------------------------
+   10. PREMIUM QUOTE COMPONENT (GLOBAL)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .tour-premium-quote {
+  position: relative;
+  background-color: #fff8f2;
+  border-left: 4px solid #ea580c;
+  padding: 1.5rem 2rem 1.5rem 3.5rem;
+  border-radius: 0 1rem 1rem 0;
+  margin: 2rem 0;
+}
+
+.elementor-tour-wrapper .tour-premium-quote .quote-icon {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  width: 2rem;
+  height: 2rem;
+  color: #fed7aa;
+  opacity: 0.8;
+}
+
+.elementor-tour-wrapper .tour-premium-quote .quote-text {
+  font-size: 1.125rem;
+  font-style: italic;
+  color: #5c2e16;
+  font-family: ui-serif, Georgia, Cambria, "Times New Roman", Times, serif;
+  line-height: 1.625;
+  margin: 0 !important;
+  position: relative;
+  z-index: 10;
+}
+
+/* --------------------------------------------------
+   11. SCHEDULE TABLE (Lịch khởi hành + Bảng giá)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .tour-schedule-section {
+  margin-top: 2.5rem;
+  margin-bottom: 3rem;
+}
+.elementor-tour-wrapper .tour-schedule-table,
+.elementor-tour-wrapper .tour-schedule-section .overflow-x-auto {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.elementor-tour-wrapper .tour-schedule-section table {
+  width: 100%;
+  min-width: 560px;
+  border-collapse: collapse;
+  text-align: left;
+  background: #ffffff;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+  border: 1px solid #e2e8f0;
+}
+.elementor-tour-wrapper .tour-schedule-section thead tr {
+  background: #f8fafc;
+  border-bottom: 2px solid #e2e8f0;
+}
+.elementor-tour-wrapper .tour-schedule-section th {
+  padding: 16px 24px;
+  font-weight: 700;
+  color: #475569;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.elementor-tour-wrapper .tour-schedule-section td {
+  padding: 16px 24px;
+  font-size: 15px;
+  color: #334155;
+  font-weight: 600;
+  border-bottom: 1px solid #f1f5f9;
+}
+.elementor-tour-wrapper .tour-schedule-section tbody tr:hover {
+  background: #f8fafc;
+  transition: background 0.2s;
+}
+.elementor-tour-wrapper .tour-schedule-section tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* --------------------------------------------------
+   12. FAQ CONTENT TYPOGRAPHY (Bao gồm / Không bao gồm)
+   Đảm bảo nội dung bên trong FAQ accordion có:
+   - Tiêu đề nhóm in đậm (p.font-bold)
+   - Bullet list có spacing đều
+   - Bold label cho mỗi list item
+   -------------------------------------------------- */
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content p.font-bold,
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content p[class*="font-bold"] {
+  font-weight: 700;
+  color: #1e293b;
+  font-size: 16px;
+  margin-top: 24px;
+  margin-bottom: 12px;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content p.font-bold:first-child,
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content p[class*="font-bold"]:first-child {
+  margin-top: 0;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ul,
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ol {
+  padding-left: 20px;
+  margin: 8px 0 16px 0;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ul {
+  list-style-type: disc;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ol {
+  list-style-type: decimal;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ul li,
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ol li {
+  padding: 6px 0;
+  line-height: 1.6;
+  color: #475569;
+  font-size: 15px;
+}
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ul li b,
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ul li strong,
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ol li b,
+.elementor-tour-wrapper .tour-faq-wrapper .faq-content ol li strong {
+  color: #1e293b;
+  font-weight: 700;
+}
+
+/* --------------------------------------------------
+   13. ACCOMMODATION SECTION (Nơi ở của bạn)
+   -------------------------------------------------- */
+.elementor-tour-wrapper .tour-accommodation-section {
+  margin-top: 2.5rem;
+  margin-bottom: 3rem;
+}
+
+/* --------------------------------------------------
+   14. PREMIUM TOUR SLIDER (Gallery Ảnh Khách Hàng)
+   Slider dạng full-width 16:9 với nav arrows, dots,
+   counter, autoplay 5s, và touch swipe trên mobile.
+   Tích hợp GLightbox khi click ảnh.
+   -------------------------------------------------- */
+.elementor-tour-wrapper .tour-slider-container {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 16px;
+  background: #0f172a;
+  aspect-ratio: 16 / 9;
+}
+.elementor-tour-wrapper .tour-slider-track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.elementor-tour-wrapper .tour-slide {
+  min-width: 100%;
+  height: 100%;
+  position: relative;
+  flex-shrink: 0;
+}
+.elementor-tour-wrapper .tour-slide-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  cursor: zoom-in;
+  display: block;
+}
+/* Navigation Arrows */
+.elementor-tour-wrapper .tour-slider-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  transition: all 0.2s ease;
+  color: #1e293b;
+}
+.elementor-tour-wrapper .tour-slider-arrow:hover {
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  transform: translateY(-50%) scale(1.08);
+}
+.elementor-tour-wrapper .tour-slider-prev { left: 12px; }
+.elementor-tour-wrapper .tour-slider-next { right: 12px; }
+/* Dots Navigation */
+.elementor-tour-wrapper .tour-slider-dots {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  z-index: 10;
+}
+.elementor-tour-wrapper .tour-slider-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.7);
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 0;
+}
+.elementor-tour-wrapper .tour-slider-dot.active {
+  background: #fff;
+  border-color: #fff;
+  transform: scale(1.2);
+}
+/* Counter Badge */
+.elementor-tour-wrapper .tour-slider-counter {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 20px;
+  z-index: 10;
+  letter-spacing: 0.5px;
+  backdrop-filter: blur(4px);
+}
+/* Responsive */
+@media (max-width: 768px) {
+  .elementor-tour-wrapper .tour-slider-arrow {
+    width: 36px;
+    height: 36px;
+  }
+  .elementor-tour-wrapper .tour-slider-prev { left: 8px; }
+  .elementor-tour-wrapper .tour-slider-next { right: 8px; }
+  .elementor-tour-wrapper .tour-slider-dots {
+    bottom: 10px;
+    gap: 6px;
+  }
+  .elementor-tour-wrapper .tour-slider-dot {
+    width: 8px;
+    height: 8px;
+  }
+}
+
+/* --------------------------------------------------
+   15. BREADCRUMB (Trang chủ > Tour Title)
+   -------------------------------------------------- */
+.breadcrumb-tour {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 0 8px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-left: 16px;
+  padding-right: 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #94a3b8;
+  flex-wrap: wrap;
+}
+.breadcrumb-tour a {
+  color: #64748b;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+.breadcrumb-tour a:hover {
+  color: #ea580c;
+}
+.breadcrumb-tour svg {
+  flex-shrink: 0;
+  color: #cbd5e1;
+}
+.breadcrumb-tour span {
+  color: #334155;
+  font-weight: 600;
+}
+
+/* Fix color contrast for Elementor migrated inline styles */
+.elementor-tour-wrapper p[style*="color: #ea580c"],
+.elementor-tour-wrapper span[style*="color: #ea580c"] {
+  color: #c2410c !important;
+}
+
+/* Fix color contrast for Elementor text-brand-600 classes */
+.elementor-tour-wrapper .text-brand-600,
+#journeys .text-brand-600 {
+  color: #c2410c !important;
+}

@@ -1,0 +1,297 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import BudgetCalculator from '../components/BudgetCalculator.jsx';
+import { Sparkles, Mountain, Compass, ShieldCheck, SunMedium, MapPin, Award, Calendar, CheckCircle } from 'lucide-react';
+import { env } from 'cloudflare:workers';
+
+export const prerender = false;
+
+const db = (env as any)?.ladakh_d1;
+let featuredTours: any[] = [];
+let recentPosts: any[] = [];
+
+if (db) {
+  try {
+    const tourRes = await db.prepare(`
+      SELECT * FROM Tour WHERE status = 'published' ORDER BY isFeatured DESC, durationDays ASC LIMIT 3
+    `).all();
+    featuredTours = tourRes.results || [];
+
+    const postRes = await db.prepare(`
+      SELECT p.*, c.name as categoryName 
+      FROM Post p 
+      LEFT JOIN BlogCategory c ON p.categoryId = c.id 
+      WHERE p.status = 'published' 
+      ORDER BY p.createdAt DESC LIMIT 3
+    `).all();
+    recentPosts = postRes.results || [];
+  } catch (e) {
+    console.error('Home page D1 error:', e);
+  }
+}
+---
+
+<BaseLayout
+  title="Du Lịch Ladakh Tự Túc - Cẩm Nang Khám Phá & Bóc Tách Chi Phí Chuẩn Thực Tế"
+  description="Kinh nghiệm du lịch Ladakh chi tiết nhất từ A-Z: Tuyến đường Leh, Đèo Khardung La, Nubra Valley, Hồ Pangong Tso. Dự toán chi phí thực tế minh bạch chuẩn biểu giá Leh Taxi Union."
+>
+  {/* HERO SECTION */}
+  <section class="relative min-h-[85vh] flex items-center justify-center bg-slate-950 text-white overflow-hidden">
+    <div class="absolute inset-0 z-0">
+      <img
+        src="https://media.dulichladakh.com/uploads/mountain-view-room-kashmir-himalaya.webp"
+        alt="Dãy núi tuyết Himalaya Ladakh hùng vĩ"
+        class="w-full h-full object-cover object-center opacity-40 scale-105 transition-transform duration-1000 ease-out"
+      />
+      <div class="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/60 to-transparent"></div>
+      <div class="absolute inset-0 bg-gradient-to-r from-slate-950/80 via-transparent to-slate-950/80"></div>
+    </div>
+
+    <div class="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center py-20">
+      <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs sm:text-sm font-semibold mb-6 tracking-wide backdrop-blur-sm">
+        <Sparkles class="w-4 h-4" />
+        VÙNG ĐẤT MẶT TRĂNG • TIỂU TÂY TẠNG TRÊN ĐỈNH HIMALAYA
+      </div>
+
+      <h1 class="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white mb-6 leading-tight">
+        Chạm Đến Thiên Đường <br />
+        <span class="bg-gradient-to-r from-amber-400 via-amber-200 to-blue-400 bg-clip-text text-transparent">
+          Du Lịch Ladakh
+        </span>
+      </h1>
+
+      <p class="text-lg sm:text-xl text-slate-300 max-w-3xl mx-auto mb-10 leading-relaxed font-normal">
+        Hành trình vượt qua những con đèo cao nhất thế giới, chiêm ngưỡng mặt hồ ngọc bích Pangong Tso và đắm chìm trong sự an yên của các tu viện Phật giáo ngàn năm tuổi.
+      </p>
+
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <a
+          href="/tour"
+          class="w-full sm:w-auto px-8 py-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-bold text-base shadow-lg shadow-amber-500/25 transition-all transform hover:-translate-y-0.5"
+        >
+          Khám Phá Tour Ladakh 2026
+        </a>
+        <a
+          href="#du-toan"
+          class="w-full sm:w-auto px-8 py-4 rounded-xl bg-slate-900/80 hover:bg-slate-800 text-white font-semibold text-base border border-slate-700 backdrop-blur-sm transition-all"
+        >
+          Tính Dự Toán Chi Phí Tự Túc
+        </a>
+      </div>
+
+      {/* QUICK STATS */}
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-16 pt-10 border-t border-slate-800/80 max-w-4xl mx-auto text-left">
+        <div class="p-3 bg-slate-900/40 rounded-xl border border-slate-800">
+          <div class="text-2xl font-bold text-amber-400">3.500m+</div>
+          <div class="text-xs text-slate-400 mt-0.5">Độ cao trung bình Leh</div>
+        </div>
+        <div class="p-3 bg-slate-900/40 rounded-xl border border-slate-800">
+          <div class="text-2xl font-bold text-amber-400">5.359m</div>
+          <div class="text-xs text-slate-400 mt-0.5">Đèo Khardung La huyền thoại</div>
+        </div>
+        <div class="p-3 bg-slate-900/40 rounded-xl border border-slate-800">
+          <div class="text-2xl font-bold text-amber-400">Tháng 5 - 9</div>
+          <div class="text-xs text-slate-400 mt-0.5">Mùa đẹp nhất trong năm</div>
+        </div>
+        <div class="p-3 bg-slate-900/40 rounded-xl border border-slate-800">
+          <div class="text-2xl font-bold text-amber-400">100% Minh Bạch</div>
+          <div class="text-xs text-slate-400 mt-0.5">Biểu giá Leh Taxi Union</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {/* FEATURED TOURS SECTION */}
+  {featuredTours.length > 0 && (
+    <section class="py-20 bg-slate-950 text-white border-b border-slate-800">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-12">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-widest text-amber-400 bg-amber-400/10 border border-amber-400/20 px-3 py-1 rounded-full">
+              HÀNH TRÌNH ĐẶC SẮC 2026
+            </span>
+            <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-3">
+              Tour Du Lịch Ladakh Khởi Hành Hàng Tuần
+            </h2>
+          </div>
+          <a href="/tour" class="text-xs font-bold text-amber-400 hover:underline mt-4 md:mt-0 flex items-center gap-1">
+            <span>Xem tất cả tour</span>
+            <span>→</span>
+          </a>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {featuredTours.map(tour => {
+            const formattedPrice = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tour.price || 0);
+            return (
+              <div class="bg-slate-900/70 border border-slate-800 rounded-3xl overflow-hidden hover:border-amber-500/40 transition-all duration-300 flex flex-col group hover:-translate-y-1 shadow-xl">
+                <div class="relative aspect-[16/10] overflow-hidden bg-slate-950">
+                  <img
+                    src={tour.featuredImage || 'https://media.dulichladakh.com/uploads/mountain-view-room-kashmir-himalaya.webp'}
+                    alt={tour.title}
+                    class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  />
+                  {tour.badge && (
+                    <span class="absolute top-3 left-3 px-2.5 py-1 rounded-lg bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider shadow">
+                      {tour.badge}
+                    </span>
+                  )}
+                  <span class="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-md text-white font-bold text-xs">
+                    {tour.durationDays}N{tour.durationNights}Đ
+                  </span>
+                </div>
+
+                <div class="p-6 flex-1 flex flex-col justify-between space-y-4">
+                  <div class="space-y-2">
+                    <h3 class="font-bold text-white text-base group-hover:text-amber-400 transition-colors line-clamp-2 leading-snug">
+                      <a href={`/tour/${tour.slug}`}>{tour.title}</a>
+                    </h3>
+                    <p class="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      {tour.overview}
+                    </p>
+                  </div>
+
+                  <div class="pt-4 border-t border-slate-800/80 flex items-center justify-between">
+                    <div>
+                      <div class="text-[10px] text-slate-500 uppercase">Trọn gói từ</div>
+                      <div class="text-base font-extrabold text-emerald-400">
+                        {formattedPrice}
+                      </div>
+                    </div>
+                    <a
+                      href={`/tour/${tour.slug}`}
+                      class="px-3.5 py-2 rounded-xl bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 text-xs font-bold transition-all border border-amber-500/30"
+                    >
+                      Chi Tiết →
+                    </a>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  )}
+
+  {/* INTERACTIVE BUDGET ESTIMATOR SECTION */}
+  <section id="du-toan" class="py-20 bg-slate-100 border-b border-slate-200">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto mb-12">
+        <span class="text-xs font-bold uppercase tracking-widest text-amber-700 bg-amber-100 px-3 py-1 rounded-full">
+          CÔNG CỤ ĐỘC QUYỀN
+        </span>
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-slate-900 mt-3 mb-4">
+          Dự Toán Chi Phí Du Lịch Ladakh Chi Tiết
+        </h2>
+        <p class="text-slate-600 text-base leading-relaxed">
+          Không sử dụng số liệu ảo. Toàn bộ tính toán được tổng hợp từ biểu giá xe cố định của <strong>Leh Taxi Operators Union</strong>, vé máy bay thực tế và định mức ăn ở khách sạn địa phương.
+        </p>
+      </div>
+
+      <BudgetCalculator client:load />
+    </div>
+  </section>
+
+  {/* BLOG & GUIDES FROM D1 */}
+  {recentPosts.length > 0 && (
+    <section class="py-20 bg-slate-900 text-white border-b border-slate-800">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-12">
+          <div>
+            <span class="text-xs font-bold uppercase tracking-widest text-blue-400 bg-blue-400/10 border border-blue-400/20 px-3 py-1 rounded-full">
+              CẨM NANG HIMALAYA
+            </span>
+            <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-3">
+              Kinh Nghiệm Du Lịch Ladakh Thực Chiến
+            </h2>
+          </div>
+          <a href="/bai-viet" class="text-xs font-bold text-amber-400 hover:underline mt-4 md:mt-0 flex items-center gap-1">
+            <span>Xem tất cả bài viết</span>
+            <span>→</span>
+          </a>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {recentPosts.map(post => (
+            <article class="bg-slate-950/70 border border-slate-800 rounded-3xl overflow-hidden hover:border-amber-500/40 transition-all flex flex-col group">
+              <a href={`/bai-viet/${post.slug}`} class="aspect-[16/10] overflow-hidden bg-slate-900 block">
+                <img
+                  src={post.featuredImage || 'https://media.dulichladakh.com/uploads/mountain-view-room-kashmir-himalaya.webp'}
+                  alt={post.title}
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+              </a>
+              <div class="p-6 flex-1 flex flex-col justify-between space-y-3">
+                <div>
+                  <div class="text-[11px] text-amber-400 font-semibold mb-1">{post.categoryName || 'Cẩm Nang'}</div>
+                  <h3 class="font-bold text-white text-base group-hover:text-amber-400 transition-colors line-clamp-2 leading-snug">
+                    <a href={`/bai-viet/${post.slug}`}>{post.title}</a>
+                  </h3>
+                  <p class="text-xs text-slate-400 line-clamp-2 mt-2 leading-relaxed">
+                    {post.excerpt}
+                  </p>
+                </div>
+                <div class="pt-3 border-t border-slate-800/80 text-[11px] text-slate-500 flex items-center justify-between">
+                  <span>⏱ {post.readingTime || 5} phút đọc</span>
+                  <a href={`/bai-viet/${post.slug}`} class="text-amber-400 hover:underline font-semibold">Đọc tiếp →</a>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  )}
+
+  {/* LƯU Ý SỐNG CÒN SECTION */}
+  <section id="cam-nang" class="py-20 bg-slate-950 text-white">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <span class="text-xs font-bold uppercase tracking-widest text-amber-400 bg-amber-400/10 border border-amber-400/20 px-3 py-1 rounded-full">
+          QUY TẮC AN TOÀN
+        </span>
+        <h2 class="text-3xl sm:text-4xl font-extrabold text-white mt-3 mb-4">
+          4 Quy Tắc "Sống Còn" Phải Biết Khi Đến Ladakh
+        </h2>
+        <p class="text-slate-400 text-base">
+          Ladakh không giống bất kỳ điểm du lịch thông thường nào. Chuẩn bị đúng sẽ biến chuyến đi thành trải nghiệm an toàn và đáng nhớ.
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800">
+          <div class="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-lg mb-4">1</div>
+          <h4 class="text-base font-bold text-white mb-2">Thích Nghi Độ Cao 48h</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Hạ cánh sân bay Leh (3.500m), bạn PHẢI về thẳng khách sạn nằm nghỉ 24 - 48h. Không chạy nhảy, không tắm nước quá nóng, uống đủ 3-4 lít nước/ngày.
+          </p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800">
+          <div class="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-lg mb-4">2</div>
+          <h4 class="text-base font-bold text-white mb-2">SIM Postpaid Bắt Buộc</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            SIM Prepaid (trả trước) mua tại Delhi sẽ bị ngắt sóng hoàn toàn khi đến Ladakh do quy định an ninh biên giới Ấn Độ. Hãy mua SIM Airtel Postpaid tại Leh.
+          </p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-lg mb-4">3</div>
+          <h4 class="text-base font-bold text-white mb-2">Quy Định Leh Taxi Union</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Xe ngoại tỉnh không được phép chở khách tham quan nội khu Ladakh. Bắt buộc thuê xe riêng do Nghiệp đoàn Taxi Leh cấp phép để bảo đảm an toàn.
+          </p>
+        </div>
+
+        <div class="p-6 rounded-2xl bg-slate-900/60 border border-slate-800">
+          <div class="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-lg mb-4">4</div>
+          <h4 class="text-base font-bold text-white mb-2">Giấy Phép Vùng Biên (ILP)</h4>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Để vào Nubra Valley, Pangong Tso, Turtuk hay Tso Moriri, du khách quốc tế bắt buộc phải có giấy phép Inner Line Permit (ILP) do chính quyền Leh cấp.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+</BaseLayout>

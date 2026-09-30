@@ -1,0 +1,263 @@
+---
+import AdminLayout from '@/layouts/AdminLayout.astro';
+import { env } from 'cloudflare:workers';
+
+export const prerender = false;
+
+const d1Db = (env as any)?.ladakh_d1;
+let categories: any[] = [];
+
+if (d1Db) {
+  try {
+    const { results } = await d1Db.prepare(`
+      SELECT c.*, p.name as parentName 
+      FROM BlogCategory c
+      LEFT JOIN BlogCategory p ON c.parentId = p.id
+      ORDER BY c.name ASC
+    `).all();
+
+    const rawCats = results || [];
+    const tree: any[] = [];
+    const lookup = new Map();
+
+    rawCats.forEach((c: any) => lookup.set(c.id, { ...c, children: [] }));
+
+    lookup.forEach((c: any) => {
+      if (c.parentId) {
+        const parent = lookup.get(c.parentId);
+        if (parent) {
+          parent.children.push(c);
+        } else {
+          tree.push(c);
+        }
+      } else {
+        tree.push(c);
+      }
+    });
+
+    const flatList: any[] = [];
+    function flatten(nodes: any[], depth = 0) {
+      nodes.forEach(node => {
+        flatList.push({ ...node, depth });
+        if (node.children.length > 0) {
+          flatten(node.children, depth + 1);
+        }
+      });
+    }
+    flatten(tree);
+    categories = flatList;
+
+  } catch (e) {
+    console.error('Error fetching categories:', e);
+  }
+}
+---
+
+<AdminLayout title="Quản Lý Chuyên Mục" activeMenu="posts" activeSubmenu="categories">
+<style>
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .header h2 { font-size: 24px; font-weight: 700; color: #0f172a; }
+  
+  .layout-grid { display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start; }
+  @media (max-width: 1024px) { .layout-grid { grid-template-columns: 1fr; } }
+  
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+  
+  .form-group { margin-bottom: 18px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+  .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; font-family: inherit; color: #0f172a; background: #fff; transition: border-color .15s; }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+  .form-group .hint { display: block; font-size: 12px; color: #64748b; margin-top: 4px; line-height: 1.4; }
+  
+  .btn-submit { background: #2563eb; color: #fff; font-weight: 600; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; transition: background .15s; }
+  .btn-submit:hover { background: #1d4ed8; }
+  
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; padding: 14px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+  tbody td { padding: 14px 16px; font-size: 13px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  tbody tr:hover { background: #f8fafc; }
+  
+  .action-link { font-size: 12px; border: none; background: none; cursor: pointer; padding: 0; display: inline-block; margin-right: 8px; font-weight: 500; }
+  .action-edit { color: #2563eb; }
+  .action-delete { color: #ef4444; }
+
+  .indent-dash { color: #94a3b8; margin-right: 4px; font-weight: bold; }
+</style>
+
+<div class="header">
+  <h2>Chuyên Mục Bài Viết</h2>
+</div>
+
+<div class="layout-grid">
+  <!-- Add New Form -->
+  <div class="card">
+    <h3 id="formTitle" style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 16px;">Thêm Chuyên Mục Mới</h3>
+    <form id="addCatForm">
+      <div class="form-group">
+        <label for="name">Tên chuyên mục *</label>
+        <input type="text" id="name" name="name" placeholder="Ví dụ: Cẩm Nang Thực Chiến" required />
+        <span class="hint">Tên hiển thị công khai trên website.</span>
+      </div>
+
+      <div class="form-group">
+        <label for="slug">Đường dẫn (Slug)</label>
+        <input type="text" id="slug" name="slug" placeholder="cam-nang-thuc-chien" />
+        <span class="hint">Tự động tạo từ tên nếu để trống. Định dạng chữ thường, không dấu.</span>
+      </div>
+
+      <div class="form-group">
+        <label for="parentId">Chuyên mục cha</label>
+        <select id="parentId" name="parentId">
+          <option value="">(Không có - Chuyên mục gốc)</option>
+          {categories.map((cat: any) => (
+            <option value={cat.id}>
+              {Array(cat.depth).fill('—').join('')} {cat.name}
+            </option>
+          ))}
+        </select>
+        <span class="hint">Tạo cấu trúc phân cấp nhiều tầng nếu cần.</span>
+      </div>
+
+      <div class="form-group">
+        <label for="description">Mô tả ngắn</label>
+        <textarea id="description" name="description" rows="3" placeholder="Mô tả tóm tắt nội dung của chuyên mục..."></textarea>
+      </div>
+
+      <button type="submit" id="submitCatBtn" class="btn-submit">Thêm Chuyên Mục</button>
+    </form>
+  </div>
+
+  <!-- List Table -->
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <table>
+      <thead>
+        <tr>
+          <th>Tên Chuyên Mục</th>
+          <th>Mô Tả</th>
+          <th>Slug</th>
+          <th>Số Bài</th>
+          <th style="width: 120px;">Thao Tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        {categories.length === 0 && (
+          <tr><td colspan="5" style="text-align: center; color: #94a3b8; padding: 36px;">Chưa có chuyên mục nào.</td></tr>
+        )}
+        {categories.map((cat: any) => (
+          <tr id={`row-${cat.id}`}>
+            <td style="font-weight: 600; color: #0f172a;">
+              {Array(cat.depth).fill(0).map(() => <span class="indent-dash">— </span>)}
+              {cat.name}
+            </td>
+            <td style="color: #64748b; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+              {cat.description || '—'}
+            </td>
+            <td style="color: #64748b; font-family: monospace; font-size: 12px;">{cat.slug}</td>
+            <td>
+              <span style="display:inline-block; padding:2px 8px; border-radius:10px; background:#f1f5f9; font-size:11px; font-weight:600; color:#475569;">
+                {cat.count || 0}
+              </span>
+            </td>
+            <td>
+              <button type="button" class="action-link action-edit" onclick={`editCat('${cat.id}', '${cat.name.replace(/'/g, "\\'")}', '${cat.slug}', '${cat.parentId || ''}', '${(cat.description || '').replace(/'/g, "\\'")}')`}>Sửa</button>
+              <button type="button" class="action-link action-delete" onclick={`deleteCat('${cat.id}')`}>Xóa</button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script is:inline>
+  let editingId = null;
+
+  document.getElementById('addCatForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('name').value.trim();
+    const slug = document.getElementById('slug').value.trim();
+    const parentId = document.getElementById('parentId').value;
+    const description = document.getElementById('description').value.trim();
+    
+    const btn = document.getElementById('submitCatBtn');
+    const originalText = btn.innerText;
+
+    btn.innerText = 'Đang lưu...';
+    btn.disabled = true;
+
+    try {
+      const url = editingId ? `/api/admin/categories/${editingId}` : '/api/admin/categories';
+      const method = editingId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, slug, parentId, description })
+      });
+      const resData = await res.json();
+
+      if (res.ok && resData.success) {
+        window.location.reload();
+      } else {
+        window.AppModal.alert(resData.message || resData.error?.message || 'Lỗi khi lưu danh mục', 'error');
+      }
+    } catch (err) {
+      window.AppModal.alert('Lỗi kết nối đến máy chủ', 'error');
+    } finally {
+      btn.innerText = originalText;
+      btn.disabled = false;
+    }
+  });
+
+  function editCat(id, name, slug, parentId, description) {
+    editingId = id;
+    document.getElementById('name').value = name;
+    document.getElementById('slug').value = slug;
+    document.getElementById('parentId').value = parentId;
+    document.getElementById('description').value = description;
+    
+    document.getElementById('submitCatBtn').innerText = 'Cập Nhật Chuyên Mục';
+    document.getElementById('formTitle').innerText = 'Chỉnh Sửa Chuyên Mục';
+    
+    if (!document.getElementById('cancelEditBtn')) {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.id = 'cancelEditBtn';
+      cancelBtn.type = 'button';
+      cancelBtn.innerText = 'Hủy';
+      cancelBtn.style.marginLeft = '8px';
+      cancelBtn.style.padding = '10px 18px';
+      cancelBtn.style.background = '#f1f5f9';
+      cancelBtn.style.border = '1px solid #cbd5e1';
+      cancelBtn.style.borderRadius = '8px';
+      cancelBtn.style.cursor = 'pointer';
+      cancelBtn.style.fontWeight = '600';
+      cancelBtn.onclick = () => {
+        editingId = null;
+        document.getElementById('addCatForm').reset();
+        document.getElementById('submitCatBtn').innerText = 'Thêm Chuyên Mục';
+        document.getElementById('formTitle').innerText = 'Thêm Chuyên Mục Mới';
+        cancelBtn.remove();
+      };
+      document.getElementById('submitCatBtn').after(cancelBtn);
+    }
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function deleteCat(id) {
+    const confirmed = await window.AppModal.confirm('Bạn có chắc chắn muốn xóa chuyên mục này?');
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        window.location.reload();
+      } else {
+        window.AppModal.alert(resData.message || resData.error?.message || 'Lỗi khi xóa chuyên mục', 'error');
+      }
+    } catch (err) {
+      window.AppModal.alert('Lỗi kết nối đến máy chủ', 'error');
+    }
+  }
+</script>
+</AdminLayout>

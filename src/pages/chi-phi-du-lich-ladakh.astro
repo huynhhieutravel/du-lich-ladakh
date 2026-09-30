@@ -1,0 +1,181 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import BudgetCalculator from '../components/BudgetCalculator.jsx';
+import { DollarSign, Plane, Car, Hotel, AlertTriangle, ShieldCheck, FileCheck, CheckCircle2 } from 'lucide-react';
+---
+
+<BaseLayout
+  title="Chi Phí Du Lịch Ladakh Chi Tiết 2026 - Đi Ladakh Hết Bao Nhiêu Tiền?"
+  description="Bóc tách toàn bộ chi phí du lịch Ladakh tự túc và theo tour: Giá vé máy bay khứ hồi, bảng giá Leh Taxi Union, tiền phòng khách sạn, giấy phép ILP và chi phí dự phòng."
+>
+  {/* HERO HEADER */}
+  <section class="bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-white pt-24 pb-16 border-b border-slate-800">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-400 text-xs font-semibold mb-4">
+        <DollarSign class="w-3.5 h-3.5" /> MINH BẠCH CHI PHÍ DU LỊCH VÙNG CAO
+      </div>
+      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight mb-6">
+        Chi Phí Du Lịch Ladakh Hết Bao Nhiêu Tiền?
+      </h1>
+      <p class="text-slate-300 text-base sm:text-lg leading-relaxed max-w-2xl mx-auto">
+        Bảng bóc tách chi phí chuẩn xác nhất dựa trên biểu giá niêm yết của <strong>Leh Taxi Operators Union</strong>, vé máy bay thực tế và định mức tiêu dùng tại thị trấn Leh.
+      </p>
+    </div>
+  </section>
+
+  {/* MAIN CONTENT CONTAINER */}
+  <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    {/* BẢNG TỔNG QUAN NHANH */}
+    <div class="bg-white rounded-2xl p-6 sm:p-8 shadow-sm border border-slate-200 mb-12">
+      <h2 class="text-xl sm:text-2xl font-bold text-slate-900 mb-4">
+        Tổng Quan Ngân Sách Dự Kiến Cho 1 Người (Tour 8 - 9 Ngày)
+      </h2>
+      <p class="text-sm text-slate-600 mb-6 leading-relaxed">
+        Chi phí phụ thuộc lớn nhất vào <strong>số lượng người trong đoàn</strong> (để chia tiền xe SUV riêng) và <strong>hạng khách sạn</strong> bạn chọn tại Leh & các thung lũng.
+      </p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="p-5 rounded-xl bg-slate-50 border border-slate-200">
+          <div class="text-xs font-bold text-slate-500 uppercase tracking-wider">Hạng Tiết Kiệm</div>
+          <div class="text-2xl font-extrabold text-slate-900 my-2">22 - 26 Triệu</div>
+          <p class="text-xs text-slate-600">Ở guesthouse / homestay, đi nhóm 4-5 người share xe Innova, bay vé khuyến mại Vietjet.</p>
+        </div>
+
+        <div class="p-5 rounded-xl bg-blue-50/60 border border-blue-200">
+          <div class="text-xs font-bold text-blue-700 uppercase tracking-wider">Hạng Tiêu Chuẩn (Phổ Biến)</div>
+          <div class="text-2xl font-extrabold text-blue-900 my-2">28 - 34 Triệu</div>
+          <p class="text-xs text-slate-600">Khách sạn 3★ có sưởi ấm, lều trại Glamping sang trọng bên hồ Pangong, xe SUV riêng đời mới.</p>
+        </div>
+
+        <div class="p-5 rounded-xl bg-amber-50/60 border border-amber-200">
+          <div class="text-xs font-bold text-amber-700 uppercase tracking-wider">Hạng Cao Cấp / Luxury</div>
+          <div class="text-2xl font-extrabold text-amber-900 my-2">45 - 60+ Triệu</div>
+          <p class="text-xs text-slate-600">Khu nghỉ dưỡng 4★-5★ như Grand Dragon Leh, Chamba Camp, xe Toyota Crysta VIP và hướng dẫn viên riêng.</p>
+        </div>
+      </div>
+    </div>
+
+    {/* BỘ CÔNG CỤ TÍNH INTERACTIVE */}
+    <div id="tinh-toan" class="mb-16">
+      <h2 class="text-2xl font-bold text-slate-900 mb-2">Bảng Tính Chi Phí Trực Tuyến</h2>
+      <p class="text-sm text-slate-600 mb-6">Tùy chỉnh số ngày, số lượng thành viên và hạng chỗ ở để có con số chính xác nhất:</p>
+      <BudgetCalculator client:load />
+    </div>
+
+    {/* CHI TIẾT TỪNG KHOẢN MỤC */}
+    <div class="space-y-12 bg-white rounded-2xl p-6 sm:p-10 border border-slate-200 shadow-sm text-slate-700">
+      {/* 1. VÉ MÁY BAY */}
+      <section id="ve-may-bay">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="p-2.5 rounded-xl bg-blue-100 text-blue-700"><Plane class="w-5 h-5" /></div>
+          <h3 class="text-xl font-bold text-slate-900">1. Chi Phí Vé Máy Bay (Khoảng 10 - 14 Triệu VNĐ)</h3>
+        </div>
+        <p class="text-sm leading-relaxed mb-4">
+          Để đến Leh (Ladakh), du khách Việt Nam bắt buộc phải bay nối chuyến qua New Delhi (DEL):
+        </p>
+        <div class="space-y-3 text-sm">
+          <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+            <strong>Chặng 1: Hà Nội/TP.HCM ⇄ New Delhi:</strong> Thường bay Vietjet Air (bay thẳng ~4.5 tiếng) với giá khứ hồi khoảng <strong>5.500.000 – 7.500.000 VNĐ</strong> (nếu săn khuyến mãi có thể rẻ hơn). Các hãng như Air India hay Vietnam Airlines dao động 8.500.000 – 11.000.000 VNĐ.
+          </div>
+          <div class="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+            <strong>Chặng 2: New Delhi ⇄ Leh (IXL):</strong> Đây là chặng bay nội địa qua dãy Himalaya tuyết trắng tuyệt đẹp. Các hãng phổ biến là <em>IndiGo, Air India, SpiceJet</em>. Giá vé khứ hồi mùa cao điểm (tháng 5 đến tháng 9) dao động <strong>3.200.000 – 5.500.000 VNĐ</strong> ($130 – $220).
+          </div>
+        </div>
+      </section>
+
+      {/* 2. CHI PHÍ XE CỘ LEH TAXI UNION */}
+      <section id="gia-xe" class="border-t border-slate-200 pt-8">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="p-2.5 rounded-xl bg-emerald-100 text-emerald-700"><Car class="w-5 h-5" /></div>
+          <h3 class="text-xl font-bold text-slate-900">2. Thuê Xe Riêng (Biểu Giá Leh Taxi Union)</h3>
+        </div>
+        <p class="text-sm leading-relaxed mb-4">
+          Địa hình Ladakh vô cùng hiểm trở với các con đèo trên 5.000m. Vì vậy, <strong>Hiệp hội Taxi Leh (Leh Taxi Union)</strong> niêm yết mức giá cố định cho từng cung đường:
+        </p>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs sm:text-sm border border-slate-200 rounded-lg text-left">
+            <thead class="bg-slate-100 text-slate-800 font-semibold border-b">
+              <tr>
+                <th class="p-3">Tuyến đường tham quan</th>
+                <th class="p-3">Thời gian</th>
+                <th class="p-3">Giá xe Innova / Scorpio (INR)</th>
+                <th class="p-3">Quy đổi VNĐ</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-200">
+              <tr>
+                <td class="p-3">Tour Nội thị Leh & Tu viện quanh Leh (Thiksey, Shey, Hemis)</td>
+                <td class="p-3">1 Ngày</td>
+                <td class="p-3">4.500 - 5.500 INR</td>
+                <td class="p-3 font-semibold text-slate-900">~1.400.000 - 1.700.000đ</td>
+              </tr>
+              <tr>
+                <td class="p-3">Leh ➔ Thung lũng Nubra (qua Đèo Khardung La 5.359m) ➔ Hồ Pangong ➔ Leh</td>
+                <td class="p-3">3 Ngày 2 Đêm</td>
+                <td class="p-3">28.000 - 32.000 INR</td>
+                <td class="p-3 font-semibold text-slate-900">~8.800.000 - 10.000.000đ</td>
+              </tr>
+              <tr>
+                <td class="p-3">Leh ➔ Nubra ➔ Turtuk (Biên giới Pakistan) ➔ Pangong ➔ Leh</td>
+                <td class="p-3">4 Ngày 3 Đêm</td>
+                <td class="p-3">38.000 - 45.000 INR</td>
+                <td class="p-3 font-semibold text-slate-900">~12.000.000 - 14.200.000đ</td>
+              </tr>
+              <tr>
+                <td class="p-3">Vòng cung đầy đủ (Thêm Hồ Tso Moriri & Hanle Dark Sky)</td>
+                <td class="p-3">6 Ngày 5 Đêm</td>
+                <td class="p-3">55.000 - 68.000 INR</td>
+                <td class="p-3 font-semibold text-slate-900">~17.500.000 - 21.500.000đ</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="text-xs text-slate-500 mt-2">
+          * Lưu ý: Giá trên là cho NGUYÊN MỘT CHIẾC XE SUV (chở tối đa 5 người lớn). Khi đi nhóm 4-5 người, chia đều mỗi người chỉ tốn từ 2.500.000 – 4.500.000 VNĐ tiền di chuyển cho cả hành trình!
+        </p>
+      </section>
+
+      {/* 3. KHÁCH SẠN */}
+      <section class="border-t border-slate-200 pt-8">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="p-2.5 rounded-xl bg-amber-100 text-amber-700"><Hotel class="w-5 h-5" /></div>
+          <h3 class="text-xl font-bold text-slate-900">3. Chi Phí Chỗ Ở & Lều Cắm Trại Glamping</h3>
+        </div>
+        <p class="text-sm leading-relaxed mb-4">
+          Tại Ladakh, bạn sẽ trải nghiệm xen kẽ giữa khách sạn tại trung tâm thị trấn Leh và các khu lều trại (camp) ngắm sao tại sa mạc Nubra hoặc bờ hồ Pangong:
+        </p>
+        <ul class="space-y-2 text-sm">
+          <li>• <strong>Homestay / Guesthouse:</strong> 1.000 – 1.600 INR/đêm (~300.000 – 500.000đ/phòng đôi). Nước nóng thường được cấp theo khung giờ hoặc xô đun.</li>
+          <li>• <strong>Khách sạn 3 sao tại Leh:</strong> 2.500 – 4.000 INR/đêm (~800.000 – 1.300.000đ/phòng đôi). Đầy đủ máy sưởi, nước nóng 24/7 và ăn sáng buffet.</li>
+          <li>• <strong>Deluxe Camp bên hồ Pangong / Nubra:</strong> 3.000 – 5.000 INR/đêm (~950.000 – 1.600.000đ/lều đôi). Có nhà vệ sinh khép kín trong lều, chăn điện giữ ấm khi đêm xuống nhiệt độ âm.</li>
+        </ul>
+      </section>
+
+      {/* 4. GIẤY PHÉP & THỦ TỤC */}
+      <section id="giay-phep" class="border-t border-slate-200 pt-8">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="p-2.5 rounded-xl bg-rose-100 text-rose-700"><FileCheck class="w-5 h-5" /></div>
+          <h3 class="text-xl font-bold text-slate-900">4. Chi Phí Giấy Phép & Thủ Tục Bắt Buộc</h3>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs sm:text-sm">
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <h4 class="font-bold text-slate-900 mb-1">E-Visa Du Lịch Ấn Độ</h4>
+            <p class="text-slate-600">Loại 30 ngày khoảng $25 (~650.000đ). Làm online trên trang chính phủ Ấn Độ trước 1-2 tuần.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <h4 class="font-bold text-slate-900 mb-1">Inner Line Permit (ILP)</h4>
+            <p class="text-slate-600">Phí môi trường & cấp phép khoảng 1.000 – 1.400 INR (~320.000 – 450.000đ). Cần in ít nhất 6-8 bản copy để nộp tại các trạm kiểm soát quân sự.</p>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <h4 class="font-bold text-slate-900 mb-1">SIM Postpaid Viễn Thông</h4>
+            <p class="text-slate-600">Khoảng 500 INR (~160.000đ) mua tại chợ Leh (chỉ mạng Airtel hoặc Jio có sóng).</p>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <h4 class="font-bold text-slate-900 mb-1">Bình Oxy Mini & Thuốc Diamox</h4>
+            <p class="text-slate-600">Khoảng 700 – 1.000 INR (~220.000 – 320.000đ) để đối phó chứng thiếu oxy vùng cao.</p>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</BaseLayout>

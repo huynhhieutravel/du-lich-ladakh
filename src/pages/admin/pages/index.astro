@@ -1,0 +1,354 @@
+---
+import AdminLayout from '@/layouts/AdminLayout.astro';
+import { env } from 'cloudflare:workers';
+
+export const prerender = false;
+
+const d1Db = env?.ladakh_d1;
+let pages: any[] = [];
+
+// Handle POST actions (trash, restore, delete, bulk)
+if (Astro.request.method === 'POST' && d1Db) {
+  try {
+    const formData = await Astro.request.formData();
+    const action = formData.get('action') as string;
+    const pageId = formData.get('pageId') as string;
+    const selectedIds = formData.getAll('selectedIds[]') as string[];
+    
+    if (action === 'trash' && pageId) {
+      await d1Db.prepare("UPDATE Page SET status = 'trash', updatedAt = CURRENT_TIMESTAMP WHERE id = ?").bind(pageId).run();
+    } else if (action === 'restore' && pageId) {
+      await d1Db.prepare("UPDATE Page SET status = 'published', updatedAt = CURRENT_TIMESTAMP WHERE id = ?").bind(pageId).run();
+    } else if (action === 'delete' && pageId) {
+      await d1Db.prepare("DELETE FROM Page WHERE id = ?").bind(pageId).run();
+    } else if (action === 'bulk-trash' && selectedIds.length > 0) {
+      const placeholders = selectedIds.map(() => '?').join(',');
+      await d1Db.prepare(`UPDATE Page SET status = 'trash', updatedAt = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).bind(...selectedIds).run();
+    } else if (action === 'bulk-restore' && selectedIds.length > 0) {
+      const placeholders = selectedIds.map(() => '?').join(',');
+      await d1Db.prepare(`UPDATE Page SET status = 'published', updatedAt = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).bind(...selectedIds).run();
+    } else if (action === 'bulk-delete' && selectedIds.length > 0) {
+      const placeholders = selectedIds.map(() => '?').join(',');
+      await d1Db.prepare(`DELETE FROM Page WHERE id IN (${placeholders})`).bind(...selectedIds).run();
+    }
+    return Astro.redirect(Astro.url.pathname + Astro.url.search);
+  } catch (e) {
+    console.error('Action error:', e);
+  }
+}
+
+const q = Astro.url.searchParams.get('q') || '';
+const limitParam = parseInt(Astro.url.searchParams.get('limit') || '30');
+const validLimits = [30, 50, 100];
+const limit = validLimits.includes(limitParam) ? limitParam : 30;
+const pageParam = parseInt(Astro.url.searchParams.get('page') || '1');
+const page = pageParam > 0 ? pageParam : 1;
+const offset = (page - 1) * limit;
+const currentTab = Astro.url.searchParams.get('status') || 'all';
+
+let counts = { all: 0, published: 0, draft: 0, trash: 0 };
+
+if (d1Db) {
+  try {
+    const { results: countResults } = await d1Db.prepare("SELECT status, COUNT(*) as count FROM Page GROUP BY status").all();
+    if (countResults) {
+      countResults.forEach((row: any) => {
+        if (row.status === 'published') counts.published = row.count;
+        if (row.status === 'draft') counts.draft = row.count;
+        if (row.status === 'trash') counts.trash = row.count;
+        counts.all += row.count;
+      });
+    }
+  } catch(e) { console.error('Error fetching counts:', e); }
+}
+
+let filteredTotal = counts.all;
+
+if (d1Db) {
+  try {
+    let baseWhere = `WHERE 1=1`;
+    const params: any[] = [];
+    
+    if (currentTab === 'trash') {
+      baseWhere += ` AND status = 'trash'`;
+    } else if (currentTab !== 'all') {
+      baseWhere += ` AND status = ?`;
+      params.push(currentTab);
+    } else {
+      baseWhere += ` AND status != 'trash'`;
+    }
+
+    if (q) {
+      const normalizeStr = (str: string) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+      const keywords = q.split(' ').map(k => k.trim()).filter(k => k.length > 0);
+      if (keywords.length > 0) {
+        const conditions = keywords.map(() => `(title LIKE ? OR slug LIKE ?)`).join(' AND ');
+        baseWhere += ` AND (${conditions})`;
+        keywords.forEach(k => {
+          params.push(`%${k}%`);
+          params.push(`%${normalizeStr(k)}%`);
+        });
+      }
+    }
+    
+    const countSql = `SELECT COUNT(*) as count FROM Page ${baseWhere}`;
+    let countQuery = d1Db.prepare(countSql);
+    if (params.length > 0) countQuery = countQuery.bind(...params);
+    const { results: filteredCountResults } = await countQuery.all();
+    if (filteredCountResults && filteredCountResults.length > 0) {
+      filteredTotal = filteredCountResults[0].count;
+    }
+
+    let sql = `SELECT * FROM Page ${baseWhere} ORDER BY updatedAt DESC LIMIT ? OFFSET ?`;
+    let query = d1Db.prepare(sql).bind(...params, limit, offset);
+    
+    const { results } = await query.all();
+    pages = results || [];
+  } catch (e) {
+    console.error('Error fetching pages:', e);
+  }
+}
+
+const totalPages = Math.ceil(filteredTotal / limit) || 1;
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return '—';
+  const safeDate = typeof dateStr === 'string' ? dateStr.replace(' ', 'T') : dateStr;
+  const d = new Date(safeDate);
+  if (isNaN(d.getTime())) return dateStr;
+  const datePart = d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const timePart = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  return `${datePart}<br/><span style="color:#94a3b8; font-size:11px;">${timePart}</span>`;
+}
+---
+
+<AdminLayout title="Tất cả Pages" activeMenu="pages" activeSubmenu="all">
+<style>
+  .posts-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .posts-header h2 { font-size: 24px; font-weight: 700; color: #0f172a; }
+  .posts-header-right { display: flex; gap: 12px; align-items: center; }
+  .posts-header-right button, .posts-header-right a { padding: 6px 14px; border-radius: 8px; font-size: 13px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; text-decoration: none; }
+  .btn-primary { background: #2563eb !important; color: #fff !important; border-color: #2563eb !important; font-weight: 600; padding: 8px 20px !important; border-radius: 8px; }
+
+  .posts-body { display: block; }
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid #e2e8f0; margin-bottom: 16px; }
+  .tabs a { padding: 10px 16px; font-size: 13px; font-weight: 500; color: #64748b; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; cursor: pointer; text-decoration: none; display: inline-block; }
+  .tabs a:hover { color: #0f172a; }
+  .tabs a.active { color: #2563eb; border-bottom-color: #2563eb; font-weight: 600; }
+  .tabs a.trash { color: #ef4444; border: 1px solid #fecaca; border-radius: 6px; margin-left: 8px; padding: 6px 12px; background: #fef2f2; }
+
+  .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .filters select, .filters button { padding: 7px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 13px; color: #334155; background: #fff; cursor: pointer; outline: none; }
+  .filters .search-box { display: flex; margin-left: auto; }
+  .filters .search-box input { padding: 7px 12px; border: 1px solid #cbd5e1; border-radius: 8px 0 0 8px; font-size: 13px; width: 200px; outline: none; }
+  .filters .search-box button { border-radius: 0 8px 8px 0; border-left: none; background: #2563eb; color: #fff; font-weight: 600; padding: 7px 14px; }
+
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead th { text-align: left; padding: 12px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+  th.col-check { width: 44px; text-align: center; }
+  th.col-title { width: 65%; }
+  th.col-date { width: 20%; }
+  tbody td { padding: 14px; font-size: 13px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:hover { background: #f8fafc; }
+  .post-cell { display: flex; align-items: center; gap: 12px; }
+  .post-cell img { width: 48px; height: 48px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: #f1f5f9; }
+  .post-cell .img-placeholder { width: 48px; height: 48px; border-radius: 8px; background: #e2e8f0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 20px; }
+  .post-cell a.page-title { font-weight: 600; color: #0f172a; text-decoration: none; font-size: 14px; }
+  .post-cell a.page-title:hover { color: #2563eb; }
+  
+  .cat-badge { padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap; display: inline-block; }
+  .cat-badge.published { background:#dcfce7; color:#16a34a; }
+  .cat-badge.draft { background:#fef3c7; color:#d97706; }
+  .cat-badge.trash { background:#fef2f2; color:#ef4444; }
+
+  .date-cell { color: #64748b; font-size: 12px; white-space: nowrap; }
+  .row-actions { display: flex; gap: 10px; align-items: center; margin-top: 4px; }
+  .action-link { font-size: 12px; text-decoration: none; cursor: pointer; display: inline-block; background: none; border: none; padding: 0; font-weight: 500; }
+  .action-edit { color: #2563eb; }
+  .action-view { color: #64748b; }
+  .action-delete { color: #ef4444; }
+  .action-restore { color: #16a34a; }
+  td input[type="checkbox"], th input[type="checkbox"] { width: 16px; height: 16px; accent-color: #2563eb; cursor: pointer; }
+  
+  .page-btn { padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; color: #64748b; font-size: 13px; background: #fff; line-height: 1; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; font-weight: 600; }
+  .page-btn:hover { border-color: #cbd5e1; color: #0f172a; }
+  .page-btn.disabled { opacity: 0.5; pointer-events: none; }
+  .page-input { width: 44px; padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 6px; text-align: center; font-size: 13px; outline: none; margin: 0 4px; }
+  .page-input::-webkit-outer-spin-button, .page-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .page-input[type=number] { -moz-appearance: textfield; }
+
+  .card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+</style>
+
+<div class="posts-header">
+  <h2>Pages (Trang Tĩnh)</h2>
+  <div class="posts-header-right">
+    <select id="perPageSelect" style="padding: 6px 14px; border-radius: 8px; font-size: 13px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; outline: none;" onchange="window.location.href='?limit='+this.value">
+      <option value="30" selected={limit === 30}>30 items</option>
+      <option value="50" selected={limit === 50}>50 items</option>
+      <option value="100" selected={limit === 100}>100 items</option>
+    </select>
+    <a href="/admin/pages/edit" class="btn-primary">+ Tạo Page Mới</a>
+  </div>
+</div>
+
+<div class="posts-body">
+  <div>
+    <div class="tabs">
+      <a href="/admin/pages?status=all" class={currentTab === 'all' ? 'active' : ''}>Tất cả ({counts.all - counts.trash})</a>
+      <a href="/admin/pages?status=published" class={currentTab === 'published' ? 'active' : ''}>Đã xuất bản ({counts.published})</a>
+      <a href="/admin/pages?status=draft" class={currentTab === 'draft' ? 'active' : ''}>Bản nháp ({counts.draft})</a>
+      <a href="/admin/pages?status=trash" class={`trash ${currentTab === 'trash' ? 'active' : ''}`}>Thùng rác ({counts.trash})</a>
+    </div>
+
+    <!-- Bulk Actions Form -->
+    <form id="bulkForm" method="POST" action="/admin/pages">
+      <div class="filters">
+        <select name="action" id="bulkActionSelect">
+          <option value="">Hành động hàng loạt</option>
+          {currentTab !== 'trash' ? (
+            <option value="bulk-trash">Chuyển vào thùng rác</option>
+          ) : (
+            <>
+              <option value="bulk-restore">Khôi phục</option>
+              <option value="bulk-delete">Xóa vĩnh viễn</option>
+            </>
+          )}
+        </select>
+        <button type="submit" id="applyBulkBtn" style="padding: 7px 14px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; font-weight: 600; cursor: pointer;">Áp dụng</button>
+
+        <div style="display: flex; align-items: center; gap: 12px; margin-left: auto;">
+          <span style="font-size: 13px; color: #64748b; font-weight: 500;">{filteredTotal} trang</span>
+          {totalPages > 1 && (
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <a href={`?page=1&limit=${limit}&status=${currentTab}&q=${q}`} class={`page-btn ${page === 1 ? 'disabled' : ''}`} aria-label="Trang đầu">«</a>
+              <a href={`?page=${Math.max(1, page - 1)}&limit=${limit}&status=${currentTab}&q=${q}`} class={`page-btn ${page === 1 ? 'disabled' : ''}`} aria-label="Trang trước">‹</a>
+              <span style="font-size: 13px; color: #64748b; font-weight: 500;">
+                <input type="number" class="page-input" value={page} min="1" max={totalPages} onkeydown={`if(event.key==='Enter') window.location.href='?limit=${limit}&status=${currentTab}&q=${q}&page='+this.value`} />
+                / {totalPages}
+              </span>
+              <a href={`?page=${Math.min(totalPages, page + 1)}&limit=${limit}&status=${currentTab}&q=${q}`} class={`page-btn ${page === totalPages ? 'disabled' : ''}`} aria-label="Trang sau">›</a>
+              <a href={`?page=${totalPages}&limit=${limit}&status=${currentTab}&q=${q}`} class={`page-btn ${page === totalPages ? 'disabled' : ''}`} aria-label="Trang cuối">»</a>
+            </div>
+          )}
+        </div>
+
+        <div class="search-box">
+          <input type="text" name="q" placeholder="Tìm kiếm trang..." value={q} onkeydown="if(event.key==='Enter'){ event.preventDefault(); window.location.href='?status='+document.querySelector('.tabs a.active').getAttribute('href').split('status=')[1]+'&q='+this.value; }" />
+          <button type="button" onclick="const input = this.previousElementSibling; window.location.href='?status='+(new URLSearchParams(window.location.search).get('status')||'all')+'&q='+input.value;">Tìm</button>
+        </div>
+      </div>
+
+      <div class="card" style="overflow:hidden;">
+        <table>
+          <thead>
+            <tr>
+              <th class="col-check"><input type="checkbox" id="selectAllCheckbox" /></th>
+              <th class="col-title">Tên Trang</th>
+              <th class="col-date">Cập nhật ⬇</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pages.length === 0 && (
+              <tr>
+                <td colspan="3" style="text-align:center; padding: 48px; color: #94a3b8;">
+                  Không tìm thấy trang nào.
+                </td>
+              </tr>
+            )}
+            {pages.map((p) => (
+              <tr data-id={p.id}>
+                <td style="text-align: center;">
+                  <input type="checkbox" name="selectedIds[]" value={p.id} class="page-checkbox" />
+                </td>
+                <td>
+                  <div class="post-cell">
+                    {p.featuredImage ? (
+                      <img src={p.featuredImage} alt={p.title} />
+                    ) : (
+                      <div class="img-placeholder">📄</div>
+                    )}
+                    <div style="display:flex; flex-direction:column; gap:3px;">
+                      <div>
+                        <a href={`/admin/pages/edit?id=${p.id}`} class="page-title">
+                          {p.title || '(Chưa có tên)'}
+                        </a>
+                        <span class={`cat-badge ${p.status}`} style="margin-left: 8px;">
+                          {p.status === 'published' ? 'Đã xuất bản' : p.status === 'draft' ? 'Bản nháp' : 'Thùng rác'}
+                        </span>
+                      </div>
+                      <div class="row-actions">
+                        {p.status !== 'trash' ? (
+                          <>
+                            <a href={`/admin/pages/edit?id=${p.id}`} class="action-link action-edit">Sửa</a>
+                            <span style="color:#cbd5e1;">|</span>
+                            <a href={`/${p.slug}`} target="_blank" class="action-link action-view">Xem thử ↗</a>
+                            <span style="color:#cbd5e1;">|</span>
+                            <button type="button" class="action-link action-delete" onclick={`submitSingleAction('trash', '${p.id}')`}>Bỏ vào thùng rác</button>
+                          </>
+                        ) : (
+                          <>
+                            <button type="button" class="action-link action-restore" onclick={`submitSingleAction('restore', '${p.id}')`}>Khôi phục</button>
+                            <span style="color:#cbd5e1;">|</span>
+                            <button type="button" class="action-link action-delete" onclick={`if(confirm('Bạn có chắc chắn muốn xóa vĩnh viễn trang này không?')) submitSingleAction('delete', '${p.id}')`}>Xóa vĩnh viễn</button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td class="date-cell" set:html={formatDate(p.updatedAt)}></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Hidden standalone form for single actions -->
+<form id="singleActionForm" method="POST" action="/admin/pages" style="display:none;">
+  <input type="hidden" name="action" id="singleActionInput" />
+  <input type="hidden" name="pageId" id="singlePageIdInput" />
+</form>
+
+<script is:inline>
+  function submitSingleAction(action, pageId) {
+    document.getElementById('singleActionInput').value = action;
+    document.getElementById('singlePageIdInput').value = pageId;
+    document.getElementById('singleActionForm').submit();
+  }
+
+  // Select all checkboxes
+  const selectAll = document.getElementById('selectAllCheckbox');
+  const itemCheckboxes = document.querySelectorAll('.page-checkbox');
+  if (selectAll) {
+    selectAll.addEventListener('change', (e) => {
+      itemCheckboxes.forEach(cb => cb.checked = e.target.checked);
+    });
+  }
+
+  // Validate bulk actions
+  const bulkForm = document.getElementById('bulkForm');
+  if (bulkForm) {
+    bulkForm.addEventListener('submit', (e) => {
+      const action = document.getElementById('bulkActionSelect').value;
+      if (!action) {
+        e.preventDefault();
+        alert('Vui lòng chọn một hành động!');
+        return;
+      }
+      const checked = document.querySelectorAll('.page-checkbox:checked');
+      if (checked.length === 0) {
+        e.preventDefault();
+        alert('Vui lòng chọn ít nhất một trang!');
+        return;
+      }
+      if (action === 'bulk-delete' && !confirm('Bạn có chắc chắn muốn xóa vĩnh viễn các trang đã chọn?')) {
+        e.preventDefault();
+      }
+    });
+  }
+</script>
+</AdminLayout>

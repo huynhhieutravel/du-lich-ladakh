@@ -1,0 +1,87 @@
+---
+import { env } from 'cloudflare:workers';
+import BaseLayout from '@/layouts/BaseLayout.astro';
+
+export const prerender = false;
+
+const { slug } = Astro.params;
+if (!slug) {
+  return new Response("Not Found", { status: 404 });
+}
+
+// Bỏ qua nếu slug thuộc về admin hoặc static
+if (['admin', 'api', 'bai-viet', 'tour', 'favicon.svg'].includes(slug)) {
+  return new Response("Not Found", { status: 404 });
+}
+
+const d1Db = env?.ladakh_d1;
+if (!d1Db) {
+  return new Response("Database Error", { status: 500 });
+}
+
+// 1. Kiểm tra bảng Page
+const page = await d1Db.prepare(`
+  SELECT * FROM Page 
+  WHERE slug = ? AND (status = 'published' OR status = 'publish')
+`).bind(slug).first<any>();
+
+// 2. Nếu không tìm thấy trong Page, kiểm tra xem có phải Post không để redirect 301 sang /bai-viet/[slug]
+if (!page) {
+  const post = await d1Db.prepare(`
+    SELECT slug FROM Post 
+    WHERE slug = ? AND (status = 'published' OR status = 'publish')
+  `).bind(slug).first<any>();
+
+  if (post) {
+    return Astro.redirect(`/bai-viet/${post.slug}`, 301);
+  }
+
+  return new Response("Trang không tồn tại", { status: 404 });
+}
+
+const title = page.seoTitle || page.title;
+const description = page.seoDescription || page.excerpt || 'Chuyên trang du lịch Ladakh - Cẩm nang khám phá và lịch trình Himalaya.';
+const image = page.ogImage || page.featuredImage || 'https://media.dulichladakh.com/uploads/mountain-view-room-kashmir-himalaya.webp';
+---
+
+<BaseLayout title={title} description={description} image={image}>
+  {page.customSchema && page.schemaEnabled !== 0 && (
+    <script type="application/ld+json" set:html={page.customSchema} />
+  )}
+
+  {page.css_content && (
+    <style set:html={page.css_content}></style>
+  )}
+
+  <article class="py-12 md:py-20 bg-slate-50 min-h-[70vh]">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6">
+      <div class="bg-white rounded-2xl shadow-sm border border-slate-200/80 p-6 sm:p-10 md:p-14">
+        <header class="mb-8 pb-6 border-b border-slate-100">
+          <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
+            {page.title}
+          </h1>
+          {page.updatedAt && (
+            <p class="mt-3 text-xs sm:text-sm text-slate-400">
+              Cập nhật lần cuối: {new Date(page.updatedAt).toLocaleDateString('vi-VN', { year: 'numeric', month: 'long', day: 'numeric' })}
+            </p>
+          )}
+        </header>
+
+        {page.featuredImage && (
+          <div class="mb-8 rounded-xl overflow-hidden shadow-sm aspect-video">
+            <img 
+              src={page.featuredImage} 
+              alt={page.title} 
+              class="w-full h-full object-cover"
+              loading="lazy"
+            />
+          </div>
+        )}
+
+        <div class="prose prose-slate max-w-none prose-headings:font-bold prose-headings:text-slate-900 prose-a:text-amber-600 hover:prose-a:text-amber-700 prose-img:rounded-xl">
+          <Fragment set:html={page.content || page.raw_content || ''} />
+        </div>
+      </div>
+    </div>
+  </article>
+</BaseLayout>

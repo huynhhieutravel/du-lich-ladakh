@@ -1,0 +1,410 @@
+---
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  activeMenu?: string;
+  activeSubmenu?: string;
+  hideSidebar?: boolean;
+}
+
+export const prerender = false;
+
+const { title, activeMenu = 'dashboard', activeSubmenu = '', hideSidebar = false } = Astro.props;
+
+// User from middleware or fallback
+const user = (Astro.locals as any)?.user || { name: 'Admin', username: 'admin', role: 'admin' };
+---
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title} | Du Lịch Ladakh CMS</title>
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style is:global>
+    * { font-family: 'Inter', sans-serif; box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f1f5f9; color: #1e293b; }
+    
+    /* Sidebar */
+    .sidebar { background: #0f172a; color: #94a3b8; height: 100vh; position: fixed; left: 0; top: 0; display: flex; flex-direction: column; z-index: 50; overflow-y: auto; overflow-x: hidden; width: 176px; transition: width 0.25s ease; }
+    .sidebar::-webkit-scrollbar { width: 4px; }
+    .sidebar::-webkit-scrollbar-track { background: #0f172a; }
+    .sidebar::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    .sidebar-logo { padding: 20px 16px; border-bottom: 1px solid #1e293b; display: flex; align-items: center; gap: 10px; }
+    .sidebar-logo .logo-box { width: 30px; height: 30px; background: linear-gradient(135deg, #f59e0b, #3b82f6); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 15px; }
+    .sidebar-logo h1 { font-size: 14px; font-weight: 700; color: #fff; line-height: 1.2; }
+    .sidebar-logo span { font-size: 10px; color: #f59e0b; display: block; font-weight: 600; text-transform: uppercase; }
+    
+    .sidebar-section { padding: 16px 12px 4px; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 1.2px; color: #475569; }
+    
+    .sidebar-menu { list-style: none; padding: 4px 8px; }
+    .sidebar-menu li { position: relative; }
+    .sidebar-menu li a, .sidebar-menu li button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 12.5px; font-weight: 500; color: #94a3b8; text-decoration: none; width: 100%; border: none; background: none; cursor: pointer; transition: all .15s; }
+    .sidebar-menu li a:hover, .sidebar-menu li button:hover { background: #1e293b; color: #e2e8f0; }
+    .sidebar-menu li a.active, .sidebar-menu li button.active { background: #2563eb; color: #fff; font-weight: 600; }
+    .sidebar-menu li a .icon, .sidebar-menu li button .icon { width: 16px; text-align: center; font-size: 13px; }
+    
+    /* Flyout Submenu */
+    .flyout-menu { 
+      display: none; 
+      position: fixed; 
+      background: #0f172a; 
+      border: 1px solid #1e293b; 
+      border-radius: 8px; 
+      padding: 6px; 
+      list-style: none; 
+      min-width: 170px; 
+      box-shadow: 4px 4px 16px rgba(0,0,0,0.4); 
+      z-index: 100; 
+    }
+    .flyout-menu li a { padding: 7px 12px; font-size: 12.5px; color: #94a3b8; border-radius: 6px; display: block; text-decoration: none; }
+    .flyout-menu li a:hover { color: #e2e8f0; background: #1e293b; }
+    .flyout-menu li a.active { color: #60a5fa; font-weight: 600; }
+    
+    .sidebar-collapse { padding: 14px 16px; border-top: 1px solid #1e293b; margin-top: auto; }
+    .sidebar-collapse button { display: flex; align-items: center; gap: 8px; color: #64748b; font-size: 12px; background: none; border: none; cursor: pointer; }
+    
+    /* Main wrapper */
+    .main-wrapper { min-height: 100vh; transition: margin-left 0.25s ease; margin-left: 176px; }
+    
+    /* Collapsed State */
+    .sidebar.sidebar-collapsed { width: 68px !important; }
+    .sidebar.sidebar-collapsed .sidebar-logo h1, .sidebar.sidebar-collapsed .sidebar-logo span { display: none; }
+    .sidebar.sidebar-collapsed .sidebar-section { display: none; }
+    .sidebar.sidebar-collapsed .sidebar-menu li a, .sidebar.sidebar-collapsed .sidebar-menu li button { padding: 12px; justify-content: center; font-size: 0; }
+    .sidebar.sidebar-collapsed .sidebar-menu li a span.icon, .sidebar.sidebar-collapsed .sidebar-menu li button span.icon { font-size: 18px; margin: 0; }
+    .sidebar.sidebar-collapsed .sidebar-menu li a svg { display: none; }
+    .sidebar.sidebar-collapsed .sidebar-menu li a span:not(.icon), .sidebar.sidebar-collapsed .sidebar-menu li button span:not(.icon) { display: none; }
+    .main-wrapper.sidebar-collapsed { margin-left: 68px !important; }
+    
+    /* Header */
+    .top-header { background: #0f172a; border-bottom: 1px solid #1e293b; padding: 0 24px; height: 56px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 40; }
+    .header-hamburger { color: #94a3b8; font-size: 18px; cursor: pointer; background: none; border: none; }
+    .header-title-text { color: #fff; font-size: 15px; font-weight: 600; }
+    .header-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
+    .header-user { display: flex; align-items: center; gap: 10px; cursor: pointer; position: relative; }
+    .header-user img { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; border: 2px solid #334155; }
+    .header-user .user-info { text-align: right; }
+    .header-user .user-name { font-size: 13px; font-weight: 600; color: #e2e8f0; }
+    .header-user .user-role { font-size: 11px; color: #64748b; text-transform: capitalize; }
+    
+    /* Content area */
+    .page-content { padding: 24px; }
+    
+    /* Common UI badges */
+    .badge-cat { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+    .badge-published { background: #dcfce7; color: #16a34a; }
+    .badge-draft { background: #fef3c7; color: #d97706; }
+    .badge-pending { background: #dbeafe; color: #2563eb; }
+    .badge-trash { background: #fee2e2; color: #dc2626; }
+  </style>
+</head>
+<body>
+  <script is:inline>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Toggle Collapse
+      const collapseBtn = document.getElementById('collapseBtn');
+      if (collapseBtn) {
+        collapseBtn.addEventListener('click', () => {
+          const sidebar = document.querySelector('.sidebar');
+          const mainWrap = document.querySelector('.main-wrapper');
+          if (sidebar) sidebar.classList.toggle('sidebar-collapsed');
+          if (mainWrap) mainWrap.classList.toggle('sidebar-collapsed');
+        });
+      }
+
+      // Flyout menus positioning
+      const menuItems = [
+        { triggerId: 'posts-menu-item', flyoutId: 'posts-flyout' },
+        { triggerId: 'pages-menu-item', flyoutId: 'pages-flyout' },
+        { triggerId: 'tours-menu-item', flyoutId: 'tours-flyout' },
+        { triggerId: 'header-user-btn', flyoutId: 'user-flyout', isUser: true }
+      ];
+
+      menuItems.forEach(({ triggerId, flyoutId, isUser }) => {
+        const trigger = document.getElementById(triggerId);
+        const flyout = document.getElementById(flyoutId);
+        if (!trigger || !flyout) return;
+
+        if (isUser) {
+          trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const rect = trigger.getBoundingClientRect();
+            flyout.style.top = (rect.bottom + 8) + 'px';
+            flyout.style.right = (window.innerWidth - rect.right) + 'px';
+            flyout.style.left = 'auto';
+            flyout.style.display = flyout.style.display === 'block' ? 'none' : 'block';
+          });
+          document.addEventListener('click', () => { flyout.style.display = 'none'; });
+        } else {
+          let timeout;
+          trigger.addEventListener('mouseenter', () => {
+            clearTimeout(timeout);
+            const rect = trigger.getBoundingClientRect();
+            flyout.style.top = rect.top + 'px';
+            flyout.style.left = (rect.right + 4) + 'px';
+            flyout.style.display = 'block';
+          });
+          trigger.addEventListener('mouseleave', () => {
+            timeout = setTimeout(() => { flyout.style.display = 'none'; }, 200);
+          });
+          flyout.addEventListener('mouseenter', () => { clearTimeout(timeout); });
+          flyout.addEventListener('mouseleave', () => { flyout.style.display = 'none'; });
+        }
+      });
+    });
+  </script>
+
+  <!-- SIDEBAR -->
+  {!hideSidebar && (
+    <nav class="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-box">L</div>
+        <div>
+          <h1>Ladakh CMS</h1>
+          <span>Bản Địa & Du Lịch</span>
+        </div>
+      </div>
+
+      <div class="sidebar-section">Content</div>
+      <ul class="sidebar-menu">
+        <li>
+          <a href="/admin" class={activeMenu === 'dashboard' ? 'active' : ''}>
+            <span class="icon">📊</span>
+            <span>Dashboard</span>
+          </a>
+        </li>
+
+        <li id="posts-menu-item">
+          <a href="/admin/posts" class={activeMenu === 'posts' ? 'active' : ''}>
+            <span class="icon">📝</span>
+            <span>Posts</span>
+            <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M4 3l4 3-4 3V3z"/></svg>
+          </a>
+          <ul id="posts-flyout" class="flyout-menu">
+            <li><a href="/admin/posts" class={activeSubmenu === 'all' ? 'active' : ''}>Tất cả Posts</a></li>
+            <li><a href="/admin/posts/edit" class={activeSubmenu === 'new' ? 'active' : ''}>Thêm Bài Mới</a></li>
+            <li><a href="/admin/categories" class={activeSubmenu === 'categories' ? 'active' : ''}>Chuyên Mục</a></li>
+            <li><a href="/admin/tags" class={activeSubmenu === 'tags' ? 'active' : ''}>Thẻ Tags</a></li>
+          </ul>
+        </li>
+
+        <li id="pages-menu-item">
+          <a href="/admin/pages" class={activeMenu === 'pages' ? 'active' : ''}>
+            <span class="icon">📄</span>
+            <span>Pages</span>
+            <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M4 3l4 3-4 3V3z"/></svg>
+          </a>
+          <ul id="pages-flyout" class="flyout-menu">
+            <li><a href="/admin/pages" class={activeSubmenu === 'all' ? 'active' : ''}>Tất cả Pages</a></li>
+            <li><a href="/admin/pages/edit" class={activeSubmenu === 'new' ? 'active' : ''}>Thêm Trang Mới</a></li>
+          </ul>
+        </li>
+
+        <li id="tours-menu-item">
+          <a href="/admin/tours" class={activeMenu === 'tours' ? 'active' : ''}>
+            <span class="icon">🏔️</span>
+            <span>Tour Ladakh</span>
+            <svg style="margin-left:auto" width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M4 3l4 3-4 3V3z"/></svg>
+          </a>
+          <ul id="tours-flyout" class="flyout-menu">
+            <li><a href="/admin/tours" class={activeSubmenu === 'all' ? 'active' : ''}>Tất cả Tours</a></li>
+            <li><a href="/admin/tours/edit" class={activeSubmenu === 'new' ? 'active' : ''}>Thêm Tour Mới</a></li>
+          </ul>
+        </li>
+
+        <li>
+          <a href="/admin/media" class={activeMenu === 'media' ? 'active' : ''}>
+            <span class="icon">🖼️</span>
+            <span>Media (R2)</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-section">Khách Hàng</div>
+      <ul class="sidebar-menu">
+        <li>
+          <a href="/admin/submissions" class={activeMenu === 'submissions' ? 'active' : ''}>
+            <span class="icon">📬</span>
+            <span>Đăng ký Khách hàng</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-section">Công Cụ &amp; SEO</div>
+      <ul class="sidebar-menu">
+        <li>
+          <a href="/admin/links" class={activeMenu === 'links' ? 'active' : ''}>
+            <span class="icon">🔗</span>
+            <span>Link Manager</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-section">Hệ Thống</div>
+      <ul class="sidebar-menu">
+        <li>
+          <a href="/admin/settings" class={activeMenu === 'settings' ? 'active' : ''}>
+            <span class="icon">⚙️</span>
+            <span>Cấu hình Website</span>
+          </a>
+        </li>
+      </ul>
+
+      <div class="sidebar-collapse">
+        <button id="collapseBtn">◀ Thu gọn</button>
+      </div>
+    </nav>
+  )}
+
+  <!-- MAIN WRAPPER -->
+  <div class="main-wrapper" style={`margin-left: ${hideSidebar ? '0' : '176px'};`}>
+    <!-- TOP HEADER -->
+    <header class="top-header">
+      <div class="header-title-text">{title}</div>
+      <div class="header-right">
+        <a 
+          href="/" 
+          target="_blank" 
+          style="display:inline-flex; align-items:center; gap:6px; padding:6px 14px; background:#1e293b; border:1px solid #334155; border-radius:8px; color:#e2e8f0; font-size:12px; font-weight:500; text-decoration:none; transition:all .15s;"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          <span>Xem Website</span>
+        </a>
+
+        <div class="header-user" id="header-user-btn">
+          <div class="user-info">
+            <div class="user-name">{user?.name || 'Admin'}</div>
+            <div class="user-role">{user?.role || 'Administrator'}</div>
+          </div>
+          <img src={`https://ui-avatars.com/api/?name=${user?.name || 'Admin'}&background=f59e0b&color=0f172a&size=68`} alt="Avatar" />
+          
+          <ul id="user-flyout" class="flyout-menu">
+            <li><a href="/api/admin/logout" style="color:#ef4444;">🚪 Đăng xuất</a></li>
+          </ul>
+        </div>
+      </div>
+    </header>
+
+    <!-- PAGE CONTENT -->
+    <main class="page-content">
+      <slot />
+    </main>
+  </div>
+
+  <!-- Global Modal System -->
+  <div id="app-modal-overlay" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(15,23,42,0.6); z-index:9999; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s;">
+    <div id="app-modal-box" style="background:#fff; border-radius:12px; padding:24px; max-width:400px; width:90%; box-shadow:0 10px 25px rgba(0,0,0,0.1); transform:translateY(20px); transition:transform 0.2s;">
+      <h3 id="app-modal-title" style="margin:0 0 8px 0; font-size:18px; color:#0f172a; font-weight:700;">Xác nhận</h3>
+      <p id="app-modal-message" style="margin:0 0 16px 0; font-size:14px; color:#475569; line-height:1.5;"></p>
+      <input type="text" id="app-modal-input" style="display:none; width:100%; box-sizing:border-box; padding:10px 12px; margin-bottom:24px; border:1px solid #cbd5e1; border-radius:6px; font-size:14px; outline:none;" />
+      <div style="display:flex; justify-content:flex-end; gap:12px;">
+        <button id="app-modal-cancel" style="padding:8px 16px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; background:#f1f5f9; color:#475569; border:none; transition:background 0.2s;">Huỷ</button>
+        <button id="app-modal-confirm" style="padding:8px 16px; border-radius:6px; font-size:14px; font-weight:600; cursor:pointer; background:#ef4444; color:#fff; border:none; transition:background 0.2s;">Đồng ý</button>
+      </div>
+    </div>
+  </div>
+
+  <script is:inline>
+    window.AppModal = {
+      _resolve: null,
+      show(message, type = 'confirm') {
+        return new Promise(resolve => {
+          this._resolve = resolve;
+          const overlay = document.getElementById('app-modal-overlay');
+          const box = document.getElementById('app-modal-box');
+          document.getElementById('app-modal-message').innerText = message;
+          
+          const btnCancel = document.getElementById('app-modal-cancel');
+          const btnConfirm = document.getElementById('app-modal-confirm');
+          const title = document.getElementById('app-modal-title');
+          const input = document.getElementById('app-modal-input');
+          
+          this._currentType = type;
+          input.style.display = 'none';
+          btnConfirm.style.display = 'block';
+          document.getElementById('app-modal-message').style.marginBottom = '24px';
+
+          if (type === 'alert') {
+            btnCancel.style.display = 'none';
+            title.innerText = 'Thông báo';
+            btnConfirm.innerText = 'Đóng';
+            btnConfirm.style.background = '#2563eb';
+          } else if (type === 'error') {
+            btnCancel.style.display = 'none';
+            title.innerText = 'Lỗi';
+            btnConfirm.innerText = 'Đóng';
+            btnConfirm.style.background = '#ef4444';
+          } else if (type === 'prompt') {
+            btnCancel.style.display = 'block';
+            title.innerText = 'Nhập thông tin';
+            btnConfirm.innerText = 'Xác nhận';
+            btnConfirm.style.background = '#2563eb';
+            input.style.display = 'block';
+            input.value = '';
+            document.getElementById('app-modal-message').style.marginBottom = '12px';
+          } else {
+            btnCancel.style.display = 'block';
+            title.innerText = 'Xác nhận';
+            btnConfirm.innerText = 'Đồng ý';
+            btnConfirm.style.background = '#ef4444';
+          }
+
+          overlay.style.display = 'flex';
+          void overlay.offsetWidth;
+          overlay.style.opacity = '1';
+          box.style.transform = 'translateY(0)';
+          
+          if (type === 'prompt') {
+            setTimeout(() => input.focus(), 100);
+          }
+        });
+      },
+      close(result) {
+        const overlay = document.getElementById('app-modal-overlay');
+        const box = document.getElementById('app-modal-box');
+        overlay.style.opacity = '0';
+        box.style.transform = 'translateY(20px)';
+        setTimeout(() => {
+          overlay.style.display = 'none';
+          if (this._resolve) this._resolve(result);
+          this._resolve = null;
+        }, 200);
+      },
+      confirm(message) {
+        return this.show(message, 'confirm');
+      },
+      alert(message, type = 'alert') {
+        return this.show(message, type);
+      },
+      prompt(message) {
+        return this.show(message, 'prompt');
+      }
+    };
+
+    document.getElementById('app-modal-cancel')?.addEventListener('click', () => window.AppModal.close(window.AppModal._currentType === 'prompt' ? null : false));
+    document.getElementById('app-modal-confirm')?.addEventListener('click', () => {
+      if (window.AppModal._currentType === 'prompt') {
+        window.AppModal.close(document.getElementById('app-modal-input').value);
+      } else {
+        window.AppModal.close(true);
+      }
+    });
+    document.getElementById('app-modal-input')?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        window.AppModal.close(document.getElementById('app-modal-input').value);
+      }
+    });
+    document.getElementById('app-modal-overlay')?.addEventListener('click', (e) => {
+      if (e.target === e.currentTarget && document.getElementById('app-modal-cancel').style.display !== 'none') {
+        window.AppModal.close(window.AppModal._currentType === 'prompt' ? null : false);
+      }
+    });
+  </script>
+</body>
+</html>

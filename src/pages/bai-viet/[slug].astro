@@ -1,0 +1,351 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { env } from 'cloudflare:workers';
+
+export const prerender = false;
+
+const { slug } = Astro.params;
+const db = (env as any)?.ladakh_d1;
+
+if (!db || !slug) {
+  return Astro.redirect('/bai-viet');
+}
+
+// Fetch current post
+const post = await db.prepare(`
+  SELECT p.*, c.name as categoryName, c.slug as categorySlug 
+  FROM Post p 
+  LEFT JOIN BlogCategory c ON p.categoryId = c.id 
+  WHERE p.slug = ? AND p.status = 'published'
+`).bind(slug).first();
+
+if (!post) {
+  return new Response("Bài viết không tồn tại hoặc đã bị gỡ bỏ", { status: 404 });
+}
+
+// Fetch related posts in same category
+let relatedPosts: any[] = [];
+if (post.categoryId) {
+  try {
+    const relRes = await db.prepare(`
+      SELECT id, title, slug, featuredImage, readingTime, createdAt 
+      FROM Post 
+      WHERE categoryId = ? AND id != ? AND status = 'published'
+      LIMIT 3
+    `).bind(post.categoryId, post.id).all();
+    relatedPosts = relRes.results || [];
+  } catch (e) {}
+}
+
+// Fetch 1 featured tour for sidebar banner
+let featuredTour: any = null;
+try {
+  featuredTour = await db.prepare(`
+    SELECT title, slug, price, durationDays, durationNights, featuredImage 
+    FROM Tour 
+    WHERE status = 'published' AND isFeatured = 1 
+    LIMIT 1
+  `).first();
+} catch (e) {}
+
+// Extract Table of Contents from HTML content
+const tocItems: { id: string; text: string; level: number }[] = [];
+const headingRegex = /<(h[23])[^>]*>(.*?)<\/\1>/gi;
+let match;
+let modifiedContent = post.content || '';
+let headingIndex = 0;
+
+// Inject IDs to headings for scrollspy
+modifiedContent = modifiedContent.replace(/<(h[23])([^>]*)>(.*?)<\/\1>/gi, (fullMatch, tag, attrs, text) => {
+  headingIndex++;
+  const cleanText = text.replace(/<[^>]*>/g, '').trim();
+  const headingId = `heading-${headingIndex}`;
+  tocItems.push({
+    id: headingId,
+    text: cleanText,
+    level: tag.toLowerCase() === 'h2' ? 2 : 3
+  });
+  return `<${tag} id="${headingId}" ${attrs}>${text}</${tag}>`;
+});
+
+const pageTitle = post.seoTitle || post.title;
+const pageDesc = post.seoDescription || post.excerpt || `${post.title} - Cẩm nang du lịch Ladakh cùng chuyên gia Himalaya.`;
+const ogImg = post.ogImage || post.featuredImage || 'https://media.dulichladakh.com/uploads/mountain-view-room-kashmir-himalaya.webp';
+---
+
+<BaseLayout 
+  title={`${pageTitle} | Du Lịch Ladakh`}
+  description={pageDesc}
+  ogImage={ogImg}
+  canonicalUrl={`https://dulichladakh.com/bai-viet/${post.slug}`}
+>
+  <!-- ARTICLE HEADER / BREADCRUMB -->
+  <header class="pt-32 pb-12 bg-slate-950 border-b border-slate-800">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6">
+      {/* Breadcrumb */}
+      <nav class="flex items-center gap-2 text-xs text-slate-500 mb-6 font-medium">
+        <a href="/" class="hover:text-slate-300">Trang Chủ</a>
+        <span>›</span>
+        <a href="/bai-viet" class="hover:text-slate-300">Cẩm Nang</a>
+        {post.categoryName && (
+          <>
+            <span>›</span>
+            <a href={`/bai-viet?chuyen-muc=${post.categorySlug}`} class="text-amber-400 hover:underline">
+              {post.categoryName}
+            </a>
+          </>
+        )}
+      </nav>
+
+      <h1 class="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight mb-6">
+        {post.title}
+      </h1>
+
+      <div class="flex flex-wrap items-center gap-4 text-xs text-slate-400 border-t border-slate-800/80 pt-4">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center border border-amber-500/30">
+            L
+          </div>
+          <span class="font-semibold text-slate-200">{post.author || 'FIT TOUR Curator'}</span>
+        </div>
+        <span>•</span>
+        <span>Ngày đăng: {new Date(post.createdAt).toLocaleDateString('vi-VN')}</span>
+        <span>•</span>
+        <span>⏱ {post.readingTime || 5} phút đọc</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="py-12 bg-slate-900 min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-12 gap-10">
+      
+      {/* LEFT COLUMN: ARTICLE BODY (8 COLS) */}
+      <article class="lg:col-span-8 space-y-8">
+        {/* HERO FEATURED IMAGE */}
+        {post.featuredImage && (
+          <div class="rounded-3xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-950">
+            <img
+              src={post.featuredImage}
+              alt={post.title}
+              class="w-full h-auto max-h-[500px] object-cover"
+            />
+          </div>
+        )}
+
+        {/* MOBILE TOC (Visible on small screens) */}
+        {tocItems.length > 0 && (
+          <div class="lg:hidden p-5 rounded-2xl bg-slate-950/80 border border-slate-800">
+            <div class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2">
+              <span>📑</span>
+              <span>Mục Lục Bài Viết</span>
+            </div>
+            <ul class="space-y-2 text-xs">
+              {tocItems.map(item => (
+                <li class={item.level === 3 ? "ml-4" : ""}>
+                  <a href={`#${item.id}`} class="text-slate-300 hover:text-amber-400 transition-colors">
+                    {item.text}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* PROSE CONTENT */}
+        <div class="prose prose-invert max-w-none prose-headings:text-white prose-headings:font-bold prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4 prose-h2:border-b prose-h2:border-slate-800 prose-h2:pb-3 prose-h3:text-xl prose-p:text-slate-300 prose-p:leading-relaxed prose-p:text-base prose-li:text-slate-300 prose-strong:text-amber-300 prose-blockquote:border-l-amber-500 prose-blockquote:bg-slate-950/60 prose-blockquote:p-4 prose-blockquote:rounded-r-xl">
+          <Fragment set:html={modifiedContent} />
+        </div>
+
+        {/* AUTHOR BIO BOX */}
+        <div class="p-6 rounded-2xl bg-slate-950 border border-slate-800 flex items-start gap-4 mt-12">
+          <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-amber-700 flex items-center justify-center text-slate-950 font-black text-xl shrink-0 shadow-md">
+            L
+          </div>
+          <div class="space-y-1">
+            <div class="text-xs font-bold uppercase tracking-wider text-amber-400">Tác Giả & Đội Ngũ Biên Tập</div>
+            <h4 class="font-bold text-white text-base">{post.author || 'Ladakh Travel Specialist'}</h4>
+            <p class="text-xs text-slate-400 leading-relaxed">
+              Các thông tin trong bài viết được cập nhật trực tiếp từ ban điều hành Leh Taxi Union, hướng dẫn viên bản địa Himalaya và đội ngũ y tế theo đoàn du lịch Ladakh.
+            </p>
+          </div>
+        </div>
+
+        {/* SHARE & TAGS */}
+        <div class="pt-6 border-t border-slate-800 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
+          <div class="flex items-center gap-2">
+            <span>Chia sẻ bài viết:</span>
+            <a
+              href={`https://www.facebook.com/sharer/sharer.php?u=https://dulichladakh.com/bai-viet/${post.slug}`}
+              target="_blank"
+              rel="noreferrer"
+              class="px-3 py-1.5 rounded-lg bg-blue-600/20 text-blue-400 border border-blue-600/30 hover:bg-blue-600/30 transition-colors font-medium"
+            >
+              Facebook
+            </a>
+          </div>
+
+          <a href="/bai-viet" class="text-amber-400 hover:underline">
+            ← Xem tất cả cẩm nang du lịch Ladakh
+          </a>
+        </div>
+      </article>
+
+      {/* RIGHT COLUMN: STICKY SIDEBAR (4 COLS) */}
+      <aside class="lg:col-span-4 space-y-6">
+        {/* DESKTOP TABLE OF CONTENTS */}
+        {tocItems.length > 0 && (
+          <div class="hidden lg:block sticky top-24 p-5 rounded-2xl bg-slate-950/80 border border-slate-800 shadow-xl backdrop-blur-sm">
+            <div class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2 pb-2 border-b border-slate-800">
+              <span>📑</span>
+              <span>Mục Lục Nội Dung</span>
+            </div>
+            <ul class="space-y-2.5 text-xs max-h-[40vh] overflow-y-auto pr-1">
+              {tocItems.map(item => (
+                <li class={item.level === 3 ? "ml-3 border-l border-slate-800 pl-2 text-slate-400" : ""}>
+                  <a href={`#${item.id}`} class="text-slate-300 hover:text-amber-400 transition-colors block line-clamp-1">
+                    {item.text}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* FEATURED TOUR WIDGET */}
+        {featuredTour && (
+          <div class="p-5 rounded-2xl bg-gradient-to-b from-amber-950/40 via-slate-950 to-slate-950 border border-amber-500/30 shadow-xl space-y-4">
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500 text-slate-950">
+              Hành Trình Khuyên Dùng
+            </span>
+
+            {featuredTour.featuredImage && (
+              <div class="aspect-video rounded-xl overflow-hidden border border-slate-800">
+                <img src={featuredTour.featuredImage} alt={featuredTour.title} class="w-full h-full object-cover" />
+              </div>
+            )}
+
+            <div>
+              <h4 class="font-bold text-white text-sm line-clamp-2 leading-snug">
+                {featuredTour.title}
+              </h4>
+              <div class="mt-2 text-emerald-400 font-black text-base">
+                {new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(featuredTour.price)}
+              </div>
+            </div>
+
+            <a
+              href={`/tour/${featuredTour.slug}`}
+              class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-bold text-center block shadow transition-all"
+            >
+              Xem Chi Tiết Tour →
+            </a>
+          </div>
+        )}
+
+        {/* QUICK CONSULTATION FORM IN SIDEBAR */}
+        <div class="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+          <h4 class="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+            <span>💬</span>
+            <span>Tư Vấn Miễn Phí Ladakh</span>
+          </h4>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            Để lại số điện thoại, chuyên gia chuyên tuyến Himalaya sẽ liên hệ tư vấn lịch trình phù hợp thể lực của bạn:
+          </p>
+
+          <form id="sidebar-consult-form" class="space-y-2.5">
+            <input
+              type="text"
+              name="customerName"
+              placeholder="Họ và tên của bạn"
+              required
+              class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white outline-none focus:border-amber-500"
+            />
+            <input
+              type="tel"
+              name="customerPhone"
+              placeholder="Số điện thoại / Zalo *"
+              required
+              class="w-full px-3 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white outline-none focus:border-amber-500 font-mono"
+            />
+            <button
+              type="submit"
+              class="w-full py-2 rounded-xl bg-slate-800 hover:bg-amber-500 hover:text-slate-950 text-amber-400 text-xs font-bold transition-all border border-slate-700"
+            >
+              Gửi Yêu Cầu Tư Vấn
+            </button>
+          </form>
+          <div id="sidebar-consult-msg" class="hidden text-xs text-emerald-400 text-center font-medium mt-2"></div>
+        </div>
+      </aside>
+    </div>
+
+    {/* RELATED POSTS SECTION */}
+    {relatedPosts.length > 0 && (
+      <section class="max-w-6xl mx-auto px-4 sm:px-6 pt-16 border-t border-slate-800/80 mt-16">
+        <h3 class="text-xl font-bold text-white mb-6">Bài Viết Cùng Chuyên Mục</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          {relatedPosts.map(rel => (
+            <a
+              href={`/bai-viet/${rel.slug}`}
+              class="group bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden hover:border-amber-500/40 transition-all flex flex-col"
+            >
+              <div class="aspect-video bg-slate-900 overflow-hidden">
+                <img
+                  src={rel.featuredImage || 'https://media.dulichladakh.com/uploads/mountain-view-room-kashmir-himalaya.webp'}
+                  alt={rel.title}
+                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                />
+              </div>
+              <div class="p-4 flex-1 flex flex-col justify-between">
+                <h4 class="text-xs font-bold text-slate-200 group-hover:text-amber-400 transition-colors line-clamp-2 leading-snug">
+                  {rel.title}
+                </h4>
+                <span class="text-[10px] text-slate-500 mt-2 block">
+                  ⏱ {rel.readingTime || 5} phút đọc
+                </span>
+              </div>
+            </a>
+          ))}
+        </div>
+      </section>
+    )}
+  </main>
+
+  <script>
+    const form = document.getElementById('sidebar-consult-form') as HTMLFormElement;
+    const msg = document.getElementById('sidebar-consult-msg');
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const payload = {
+        formType: 'consultation_sidebar',
+        customerName: formData.get('customerName'),
+        customerPhone: formData.get('customerPhone'),
+        sourceUrl: window.location.pathname,
+        tourName: 'Tư vấn từ bài viết: ' + document.title
+      };
+
+      try {
+        const res = await fetch('/api/contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (res.ok && result.success) {
+          if (msg) {
+            msg.classList.remove('hidden');
+            msg.textContent = '✓ Đã nhận thông tin! Chuyên viên sẽ gọi cho bạn ngay.';
+          }
+          form.reset();
+        } else {
+          alert(result.message || 'Lỗi gửi yêu cầu');
+        }
+      } catch (err) {
+        alert('Lỗi kết nối máy chủ');
+      }
+    });
+  </script>
+</BaseLayout>

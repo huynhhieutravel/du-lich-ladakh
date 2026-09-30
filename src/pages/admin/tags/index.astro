@@ -1,0 +1,198 @@
+---
+import AdminLayout from '@/layouts/AdminLayout.astro';
+import { env } from 'cloudflare:workers';
+
+export const prerender = false;
+
+const d1Db = (env as any)?.ladakh_d1;
+let tags: any[] = [];
+
+if (d1Db) {
+  try {
+    const { results } = await d1Db.prepare(`
+      SELECT t.*, (SELECT COUNT(*) FROM PostTag pt WHERE pt.tagId = t.id) as count
+      FROM Tag t 
+      ORDER BY t.name ASC
+    `).all();
+    tags = results || [];
+  } catch (e) {
+    console.error('Error fetching tags:', e);
+  }
+}
+---
+
+<AdminLayout title="Thẻ Tags" activeMenu="posts" activeSubmenu="tags">
+<style>
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .header h2 { font-size: 24px; font-weight: 700; color: #0f172a; }
+  
+  .layout-grid { display: grid; grid-template-columns: 340px 1fr; gap: 24px; align-items: start; }
+  @media (max-width: 1024px) { .layout-grid { grid-template-columns: 1fr; } }
+  
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.03); }
+  
+  .form-group { margin-bottom: 18px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 6px; }
+  .form-group input { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; outline: none; font-family: inherit; color: #0f172a; background: #fff; transition: border-color .15s; }
+  .form-group input:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+  .form-group .hint { display: block; font-size: 12px; color: #64748b; margin-top: 4px; line-height: 1.4; }
+  
+  .btn-submit { background: #2563eb; color: #fff; font-weight: 600; padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; transition: background .15s; }
+  .btn-submit:hover { background: #1d4ed8; }
+  
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; padding: 14px 16px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+  tbody td { padding: 14px 16px; font-size: 13px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+  tbody tr:hover { background: #f8fafc; }
+  
+  .action-link { font-size: 12px; border: none; background: none; cursor: pointer; padding: 0; display: inline-block; margin-right: 8px; font-weight: 500; }
+  .action-edit { color: #2563eb; }
+  .action-delete { color: #ef4444; }
+</style>
+
+<div class="header">
+  <h2>Thẻ Tags Bài Viết</h2>
+</div>
+
+<div class="layout-grid">
+  <!-- Add New Form -->
+  <div class="card">
+    <h3 id="formTitle" style="font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 16px;">Thêm Thẻ Tag Mới</h3>
+    <form id="addTagForm">
+      <div class="form-group">
+        <label for="name">Tên thẻ *</label>
+        <input type="text" id="name" name="name" placeholder="Ví dụ: Đèo Umling La" required />
+        <span class="hint">Tên thẻ xuất hiện gắn liền dưới mỗi bài viết.</span>
+      </div>
+      <div class="form-group">
+        <label for="slug">Đường dẫn (Slug)</label>
+        <input type="text" id="slug" name="slug" placeholder="deo-umling-la" />
+        <span class="hint">Tự động tạo từ tên nếu để trống. Định dạng chữ thường, không dấu.</span>
+      </div>
+      <button type="submit" id="submitTagBtn" class="btn-submit">Thêm Thẻ Tag</button>
+    </form>
+  </div>
+
+  <!-- List Table -->
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <table>
+      <thead>
+        <tr>
+          <th>Tên Thẻ</th>
+          <th>Đường Dẫn (Slug)</th>
+          <th>Số Bài Viết</th>
+          <th style="width: 120px;">Thao Tác</th>
+        </tr>
+      </thead>
+      <tbody>
+        {tags.length === 0 && (
+          <tr><td colspan="4" style="text-align: center; color: #94a3b8; padding: 36px;">Chưa có thẻ tag nào.</td></tr>
+        )}
+        {tags.map((tag: any) => (
+          <tr id={`row-${tag.id}`}>
+            <td style="font-weight: 600; color: #0f172a;">#{tag.name}</td>
+            <td style="color: #64748b; font-family: monospace; font-size: 12px;">{tag.slug}</td>
+            <td>
+              <span style="display:inline-block; padding:2px 8px; border-radius:10px; background:#f1f5f9; font-size:11px; font-weight:600; color:#475569;">
+                {tag.count || 0}
+              </span>
+            </td>
+            <td>
+              <button type="button" class="action-link action-edit" onclick={`editTag('${tag.id}', '${tag.name.replace(/'/g, "\\'")}', '${tag.slug}')`}>Sửa</button>
+              <button type="button" class="action-link action-delete" onclick={`deleteTag('${tag.id}')`}>Xóa</button>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script is:inline>
+  let editingId = null;
+
+  document.getElementById('addTagForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const name = document.getElementById('name').value.trim();
+    const slug = document.getElementById('slug').value.trim();
+    
+    const btn = document.getElementById('submitTagBtn');
+    const originalText = btn.innerText;
+
+    btn.innerText = 'Đang lưu...';
+    btn.disabled = true;
+
+    try {
+      const url = editingId ? `/api/admin/tags/${editingId}` : '/api/admin/tags';
+      const method = editingId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, slug })
+      });
+      const resData = await res.json();
+
+      if (res.ok && resData.success) {
+        window.location.reload();
+      } else {
+        window.AppModal.alert(resData.message || resData.error?.message || 'Lỗi khi lưu thẻ tag', 'error');
+      }
+    } catch (err) {
+      window.AppModal.alert('Lỗi kết nối đến máy chủ', 'error');
+    } finally {
+      btn.innerText = originalText;
+      btn.disabled = false;
+    }
+  });
+
+  function editTag(id, name, slug) {
+    editingId = id;
+    document.getElementById('name').value = name;
+    document.getElementById('slug').value = slug;
+    
+    document.getElementById('submitTagBtn').innerText = 'Cập Nhật Thẻ';
+    document.getElementById('formTitle').innerText = 'Chỉnh Sửa Thẻ Tag';
+    
+    if (!document.getElementById('cancelEditBtn')) {
+      const cancelBtn = document.createElement('button');
+      cancelBtn.id = 'cancelEditBtn';
+      cancelBtn.type = 'button';
+      cancelBtn.innerText = 'Hủy';
+      cancelBtn.style.marginLeft = '8px';
+      cancelBtn.style.padding = '10px 18px';
+      cancelBtn.style.background = '#f1f5f9';
+      cancelBtn.style.border = '1px solid #cbd5e1';
+      cancelBtn.style.borderRadius = '8px';
+      cancelBtn.style.cursor = 'pointer';
+      cancelBtn.style.fontWeight = '600';
+      cancelBtn.onclick = () => {
+        editingId = null;
+        document.getElementById('addTagForm').reset();
+        document.getElementById('submitTagBtn').innerText = 'Thêm Thẻ Tag';
+        document.getElementById('formTitle').innerText = 'Thêm Thẻ Tag Mới';
+        cancelBtn.remove();
+      };
+      document.getElementById('submitTagBtn').after(cancelBtn);
+    }
+    
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function deleteTag(id) {
+    const confirmed = await window.AppModal.confirm('Bạn có chắc chắn muốn xóa thẻ tag này?');
+    if (!confirmed) return;
+    try {
+      const res = await fetch(`/api/admin/tags/${id}`, { method: 'DELETE' });
+      const resData = await res.json();
+      if (res.ok && resData.success) {
+        window.location.reload();
+      } else {
+        window.AppModal.alert(resData.message || resData.error?.message || 'Lỗi khi xóa thẻ', 'error');
+      }
+    } catch (err) {
+      window.AppModal.alert('Lỗi kết nối đến máy chủ', 'error');
+    }
+  }
+</script>
+</AdminLayout>

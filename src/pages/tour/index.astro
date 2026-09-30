@@ -1,0 +1,166 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { env } from 'cloudflare:workers';
+
+export const prerender = false;
+
+const db = (env as any)?.ladakh_d1;
+let tours: any[] = [];
+
+if (db) {
+  try {
+    const { results } = await db.prepare(`
+      SELECT * FROM Tour WHERE status = 'published' ORDER BY isFeatured DESC, durationDays ASC
+    `).all();
+    tours = results || [];
+  } catch (e) {
+    console.error('Error fetching tours:', e);
+  }
+}
+
+const pageTitle = "Tour Du Lịch Ladakh Khởi Hành 2026 | Lịch Trình Chuyên Sâu";
+const pageDesc = "Danh sách tour du lịch Ladakh trọn gói chất lượng cao: 7N6Đ, 9N8Đ, 11N10Đ. Xe SUV 4x4 chuẩn Leh Taxi Union, lưu trú tiện nghi, cam kết thích nghi độ cao an toàn.";
+---
+
+<BaseLayout 
+  title={pageTitle}
+  description={pageDesc}
+  canonicalUrl="https://dulichladakh.com/tour"
+>
+  <!-- HERO BANNER -->
+  <section class="relative pt-32 pb-20 overflow-hidden bg-slate-950 border-b border-slate-800">
+    <div class="absolute inset-0 opacity-20 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-amber-500/30 via-transparent to-transparent pointer-events-none"></div>
+
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 relative z-10 text-center">
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-semibold mb-4">
+        <span>🏔️</span>
+        <span>Hành Trình Chinh Phục Thượng Giới Ladakh</span>
+      </div>
+      <h1 class="text-3xl sm:text-5xl font-black text-white tracking-tight mb-4 max-w-3xl mx-auto">
+        Tour Du Lịch Ladakh 2026
+      </h1>
+      <p class="text-sm sm:text-base text-slate-400 max-w-2xl mx-auto leading-relaxed">
+        Thiết kế chuyên sâu theo thể lực người Việt: tốc độ tăng độ cao an toàn, xe SUV 4WD riêng theo chuẩn Leh Taxi Operators Union, hướng dẫn viên và bình oxy y tế đồng hành suốt tuyến.
+      </p>
+    </div>
+  </section>
+
+  <!-- TOURS LIST -->
+  <section class="py-16 bg-slate-900 min-h-[500px]">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 space-y-10">
+      {tours.map((tour, idx) => {
+        let highlightsArr: string[] = [];
+        try {
+          highlightsArr = typeof tour.highlights === 'string' ? JSON.parse(tour.highlights) : (tour.highlights || []);
+        } catch (e) {}
+
+        const formattedPrice = new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tour.price || 0);
+        const formattedOldPrice = tour.originalPrice > tour.price 
+          ? new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(tour.originalPrice)
+          : null;
+
+        return (
+          <div class="bg-slate-950/80 border border-slate-800 rounded-3xl overflow-hidden hover:border-amber-500/40 transition-all duration-300 shadow-xl grid grid-cols-1 lg:grid-cols-12 gap-0 group">
+            
+            {/* THUMBNAIL (5 COLS) */}
+            <div class="lg:col-span-5 relative min-h-[260px] lg:min-h-full overflow-hidden bg-slate-900">
+              <img
+                src={tour.featuredImage || 'https://media.dulichladakh.com/uploads/mountain-view-room-kashmir-himalaya.webp'}
+                alt={tour.title}
+                loading="lazy"
+                class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              />
+              <div class="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-transparent lg:hidden"></div>
+
+              {/* BADGE */}
+              <div class="absolute top-4 left-4 flex flex-col gap-2">
+                {tour.isFeatured ? (
+                  <span class="px-3 py-1 rounded-xl bg-amber-500 text-slate-950 text-xs font-black uppercase tracking-wider shadow-lg">
+                    HOT TOUR
+                  </span>
+                ) : null}
+                {tour.badge && (
+                  <span class="px-3 py-1 rounded-xl bg-slate-950/80 backdrop-blur-md text-amber-400 border border-slate-700 text-xs font-semibold">
+                    {tour.badge}
+                  </span>
+                )}
+              </div>
+
+              {/* DURATION BADGE */}
+              <div class="absolute bottom-4 left-4 lg:hidden">
+                <span class="px-3 py-1.5 rounded-xl bg-slate-900/90 text-white font-bold text-xs border border-slate-700">
+                  ⏱ {tour.durationDays} Ngày {tour.durationNights} Đêm
+                </span>
+              </div>
+            </div>
+
+            {/* INFO (7 COLS) */}
+            <div class="lg:col-span-7 p-6 sm:p-8 flex flex-col justify-between space-y-6">
+              <div class="space-y-4">
+                <div class="hidden lg:flex items-center gap-3">
+                  <span class="px-3 py-1 rounded-xl bg-slate-900 text-amber-400 font-bold text-xs border border-slate-800">
+                    ⏱ {tour.durationDays} Ngày {tour.durationNights} Đêm
+                  </span>
+                  <span class="text-xs text-slate-400 flex items-center gap-1">
+                    <span>📍 Khởi hành:</span>
+                    <strong class="text-slate-200">{tour.departureLocation || 'Leh'}</strong>
+                  </span>
+                </div>
+
+                <h2 class="text-xl sm:text-2xl font-black text-white group-hover:text-amber-400 transition-colors leading-snug">
+                  <a href={`/tour/${tour.slug}`}>{tour.title}</a>
+                </h2>
+
+                <p class="text-xs sm:text-sm text-slate-400 line-clamp-2 leading-relaxed">
+                  {tour.overview}
+                </p>
+
+                {/* HIGHLIGHTS BULLETS */}
+                {highlightsArr.length > 0 && (
+                  <div class="space-y-1.5 pt-2">
+                    <div class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Trải nghiệm nổi bật:</div>
+                    <ul class="space-y-1">
+                      {highlightsArr.slice(0, 3).map(hl => (
+                        <li class="text-xs text-slate-300 flex items-start gap-2">
+                          <span class="text-amber-400 font-bold">✓</span>
+                          <span>{hl}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+
+              {/* PRICING & CTA */}
+              <div class="pt-6 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <div class="text-[11px] text-slate-400 uppercase tracking-wider font-semibold">Giá trọn gói từ</div>
+                  <div class="flex items-baseline gap-2">
+                    <span class="text-2xl font-black text-emerald-400 tracking-tight">
+                      {formattedPrice}
+                    </span>
+                    {formattedOldPrice && (
+                      <span class="text-xs text-slate-500 line-through">
+                        {formattedOldPrice}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                  <a
+                    href={`/tour/${tour.slug}`}
+                    class="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-xs shadow-lg shadow-amber-500/10 transition-all inline-flex items-center gap-1.5"
+                  >
+                    <span>Xem Lịch Trình</span>
+                    <span>→</span>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </section>
+</BaseLayout>

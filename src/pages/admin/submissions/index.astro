@@ -1,0 +1,363 @@
+---
+import AdminLayout from '@/layouts/AdminLayout.astro';
+import { env } from 'cloudflare:workers';
+
+let submissions: any[] = [];
+let total = 0;
+let page = 1;
+let limit = 20;
+let totalPages = 1;
+let statusFilter = '';
+let statusCounts: any[] = [];
+
+try {
+  const url = new URL(Astro.request.url);
+  page = parseInt(url.searchParams.get('page') || '1');
+  statusFilter = url.searchParams.get('status') || '';
+  const offset = (page - 1) * limit;
+
+  const d1Db = env?.ladakh_d1;
+  if (d1Db) {
+    // Count by status
+    const countsResult = await d1Db.prepare('SELECT status, COUNT(*) as count FROM FormSubmission GROUP BY status').all();
+    statusCounts = countsResult.results || [];
+
+    let whereClause = '';
+    const bindings: any[] = [];
+    if (statusFilter) {
+      whereClause = 'WHERE status = ?';
+      bindings.push(statusFilter);
+    }
+
+    const totalCountResult = await d1Db.prepare(`SELECT COUNT(*) as total FROM FormSubmission ${whereClause}`).bind(...bindings).first();
+    total = (totalCountResult?.total as number) || 0;
+    totalPages = Math.ceil(total / limit);
+
+    const queryBindings = [...bindings, limit, offset];
+    const { results } = await d1Db.prepare(`SELECT * FROM FormSubmission ${whereClause} ORDER BY createdAt DESC LIMIT ? OFFSET ?`).bind(...queryBindings).all();
+    submissions = results || [];
+  }
+} catch (e) {
+  console.error('Error fetching submissions', e);
+}
+
+const totalAll = statusCounts.reduce((sum: number, s: any) => sum + (s.count as number), 0);
+const newCount = statusCounts.find((s: any) => s.status === 'new')?.count || 0;
+const contactedCount = statusCounts.find((s: any) => s.status === 'contacted')?.count || 0;
+const convertedCount = statusCounts.find((s: any) => s.status === 'converted')?.count || 0;
+const spamCount = statusCounts.find((s: any) => s.status === 'spam')?.count || 0;
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr + 'Z');
+    return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch { return dateStr; }
+}
+
+function getStatusBadge(status: string) {
+  switch(status) {
+    case 'new': return '<span class="status-badge status-new">🔔 Mới</span>';
+    case 'contacted': return '<span class="status-badge status-contacted">📞 Đã liên hệ</span>';
+    case 'converted': return '<span class="status-badge status-converted">✅ Đã chốt</span>';
+    case 'spam': return '<span class="status-badge status-spam">🚫 Spam</span>';
+    default: return `<span class="status-badge">${status}</span>`;
+  }
+}
+
+function parseOptions(optionsStr: string | null) {
+  if (!optionsStr) return null;
+  try { return JSON.parse(optionsStr); } catch { return null; }
+}
+---
+
+<AdminLayout title="Đăng Ký Khách Hàng" activeMenu="submissions">
+<style>
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px; }
+  .header h2 { font-size: 24px; font-weight: 700; }
+
+  .stats-row { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px 20px; flex: 1; min-width: 120px; text-decoration: none; transition: all 0.15s; cursor: pointer; }
+  .stat-card:hover { border-color: #2563eb; box-shadow: 0 0 0 2px #bfdbfe; }
+  .stat-card.active { border-color: #2563eb; background: #eff6ff; }
+  .stat-card .stat-number { font-size: 28px; font-weight: 800; color: #0f172a; }
+  .stat-card .stat-label { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .stat-new .stat-number { color: #f59e0b; }
+  .stat-contacted .stat-number { color: #2563eb; }
+  .stat-converted .stat-number { color: #16a34a; }
+  .stat-spam .stat-number { color: #94a3b8; }
+
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; padding: 12px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; border-bottom: 1px solid #e2e8f0; background: #f8fafc; white-space: nowrap; }
+  tbody td { padding: 12px 14px; font-size: 13px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  tbody tr:hover { background: #f8fafc; }
+  tbody tr.row-new { border-left: 3px solid #f59e0b; }
+
+  .customer-name { font-weight: 700; color: #0f172a; font-size: 14px; }
+  .customer-phone { color: #2563eb; font-weight: 600; font-size: 13px; }
+  .customer-phone a { color: inherit; text-decoration: none; }
+  .customer-email { color: #64748b; font-size: 12px; }
+
+  .tour-tag { display: inline-block; background: #fef3c7; color: #92400e; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .options-list { font-size: 11px; color: #475569; line-height: 1.5; }
+  .options-list span { display: block; }
+
+  .status-badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+  .status-new { background: #fef3c7; color: #92400e; }
+  .status-contacted { background: #dbeafe; color: #1e40af; }
+  .status-converted { background: #dcfce7; color: #166534; }
+  .status-spam { background: #f1f5f9; color: #94a3b8; }
+
+  .action-btn { font-size: 11px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; padding: 4px 8px; border-radius: 4px; color: #475569; margin: 2px; white-space: nowrap; }
+  .action-btn:hover { background: #f1f5f9; }
+  .action-btn.danger { color: #ef4444; border-color: #fecaca; }
+  .action-btn.danger:hover { background: #fef2f2; }
+
+  .empty-state { text-align: center; color: #94a3b8; padding: 48px 24px; }
+  .empty-state .emoji { font-size: 48px; margin-bottom: 12px; }
+
+  .detail-modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
+  .detail-modal-overlay.show { display: flex; }
+  .detail-modal { background: #fff; border-radius: 12px; max-width: 520px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 25px 50px rgba(0,0,0,0.25); }
+  .detail-modal-header { padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+  .detail-modal-header h3 { font-size: 18px; font-weight: 700; }
+  .detail-modal-body { padding: 24px; }
+  .detail-row { display: flex; margin-bottom: 12px; }
+  .detail-label { width: 120px; font-size: 12px; color: #64748b; font-weight: 600; flex-shrink: 0; padding-top: 2px; }
+  .detail-value { font-size: 14px; color: #0f172a; flex: 1; }
+  .detail-modal-footer { padding: 16px 24px; border-top: 1px solid #e2e8f0; display: flex; gap: 8px; justify-content: flex-end; }
+  .btn-primary { background: #2563eb; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; padding: 8px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+</style>
+
+<div class="header">
+  <h2>📋 Đăng Ký Khách Hàng</h2>
+</div>
+
+<!-- Stats Cards -->
+<div class="stats-row">
+  <a href="/admin/submissions" class={`stat-card ${!statusFilter ? 'active' : ''}`}>
+    <div class="stat-number">{totalAll}</div>
+    <div class="stat-label">Tổng cộng</div>
+  </a>
+  <a href="/admin/submissions?status=new" class={`stat-card stat-new ${statusFilter === 'new' ? 'active' : ''}`}>
+    <div class="stat-number">{newCount}</div>
+    <div class="stat-label">🔔 Chưa xử lý</div>
+  </a>
+  <a href="/admin/submissions?status=contacted" class={`stat-card stat-contacted ${statusFilter === 'contacted' ? 'active' : ''}`}>
+    <div class="stat-number">{contactedCount}</div>
+    <div class="stat-label">📞 Đã liên hệ</div>
+  </a>
+  <a href="/admin/submissions?status=converted" class={`stat-card stat-converted ${statusFilter === 'converted' ? 'active' : ''}`}>
+    <div class="stat-number">{convertedCount}</div>
+    <div class="stat-label">✅ Đã chốt</div>
+  </a>
+  <a href="/admin/submissions?status=spam" class={`stat-card stat-spam ${statusFilter === 'spam' ? 'active' : ''}`}>
+    <div class="stat-number">{spamCount}</div>
+    <div class="stat-label">🚫 Spam</div>
+  </a>
+</div>
+
+<!-- Table -->
+<div class="card" style="overflow: hidden; overflow-x: auto;">
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Khách hàng</th>
+        <th>Chương trình</th>
+        <th>Chi tiết</th>
+        <th>Trạng thái</th>
+        <th>Thời gian</th>
+        <th style="width: 140px;">Hành động</th>
+      </tr>
+    </thead>
+    <tbody>
+      {submissions.length === 0 && (
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <div class="emoji">📭</div>
+              <div>Chưa có đăng ký nào{statusFilter ? ` với trạng thái "${statusFilter}"` : ''}.</div>
+            </div>
+          </td>
+        </tr>
+      )}
+      {submissions.map((sub, i) => {
+        const opts = parseOptions(sub.options as string);
+        return (
+          <tr class={sub.status === 'new' ? 'row-new' : ''}>
+            <td style="color: #94a3b8; font-size: 12px;">{sub.id}</td>
+            <td>
+              <div class="customer-name">{sub.customerName || '—'}</div>
+              {sub.customerPhone && <div class="customer-phone"><a href={`tel:${sub.customerPhone}`}>{sub.customerPhone}</a></div>}
+              {sub.customerEmail && <div class="customer-email">{sub.customerEmail}</div>}
+            </td>
+            <td>
+              {sub.tourName ? <span class="tour-tag">{sub.tourName}</span> : <span style="color: #cbd5e1;">—</span>}
+            </td>
+            <td>
+              {opts ? (
+                <div>
+                  <div class="options-list" style="margin-bottom: 8px;">
+                    {opts.month && <span>📅 {opts.month}</span>}
+                    {opts.companyName && <span>🏢 {opts.companyName}</span>}
+                    {opts.ageGroup && <span>👥 {opts.ageGroup}</span>}
+                  </div>
+                  <button class="action-btn" onclick="showDetails(this)" data-payload={JSON.stringify(sub)} style="color: #2563eb; border-color: #bfdbfe; background: #eff6ff;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 2px; margin-top: -2px;"><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path><path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path></svg>
+                    Xem chi tiết
+                  </button>
+                </div>
+              ) : <span style="color: #cbd5e1;">—</span>}
+            </td>
+            <td>
+              <Fragment set:html={getStatusBadge(sub.status as string)} />
+              {sub.notes && <div style="font-size: 11px; color: #64748b; margin-top: 4px; max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title={sub.notes as string}>📝 {sub.notes}</div>}
+            </td>
+            <td style="font-size: 12px; color: #64748b; white-space: nowrap;">
+              {formatDate(sub.createdAt as string)}
+              {sub.sourceUrl && (
+                <div style="margin-top: 2px;">
+                  <a href={sub.sourceUrl as string} target="_blank" style="font-size: 10px; color: #94a3b8; text-decoration: underline;">🌐 Xem trang</a>
+                </div>
+              )}
+            </td>
+            <td>
+              <button class="action-btn" onclick={`updateStatus(${sub.id}, 'contacted')`} title="Đánh dấu đã liên hệ">📞</button>
+              <button class="action-btn" onclick={`updateStatus(${sub.id}, 'converted')`} title="Đánh dấu đã chốt">✅</button>
+              <button class="action-btn" onclick={`updateStatus(${sub.id}, 'spam')`} title="Đánh dấu spam">🚫</button>
+              <button class="action-btn danger" onclick={`deleteSubmission(${sub.id})`} title="Xóa">🗑️</button>
+            </td>
+          </tr>
+        );
+      })}
+    </tbody>
+  </table>
+
+  {/* Pagination */}
+  {totalPages > 1 && (
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 16px; border-top: 1px solid #e2e8f0; background: #f8fafc;">
+      <span style="font-size: 13px; color: #64748b;">Trang {page} / {totalPages} (Tổng: {total})</span>
+      <div style="display: flex; gap: 8px;">
+        {page > 1 ? (
+          <a href={`/admin/submissions?page=${page - 1}${statusFilter ? `&status=${statusFilter}` : ''}`} style="padding: 6px 12px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #334155; text-decoration: none;">Trước</a>
+        ) : (
+          <span style="padding: 6px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f1f5f9; color: #94a3b8;">Trước</span>
+        )}
+        {page < totalPages ? (
+          <a href={`/admin/submissions?page=${page + 1}${statusFilter ? `&status=${statusFilter}` : ''}`} style="padding: 6px 12px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; color: #334155; text-decoration: none;">Sau</a>
+        ) : (
+          <span style="padding: 6px 12px; font-size: 13px; border: 1px solid #e2e8f0; border-radius: 6px; background: #f1f5f9; color: #94a3b8;">Sau</span>
+        )}
+      </div>
+    </div>
+  )}
+</div>
+
+<div id="submissionModal" class="detail-modal-overlay">
+  <div class="detail-modal">
+    <div class="detail-modal-header">
+      <h3 id="modalTitle">Chi tiết Đăng ký</h3>
+      <button onclick="closeModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:#64748b;">&times;</button>
+    </div>
+    <div class="detail-modal-body" id="modalBody">
+      <!-- Content will be injected here -->
+    </div>
+    <div class="detail-modal-footer">
+      <button class="btn-secondary" onclick="closeModal()">Đóng</button>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  function showDetails(btn) {
+    const payloadStr = btn.getAttribute('data-payload');
+    if (!payloadStr) return;
+    const sub = JSON.parse(payloadStr);
+    const opts = sub.options ? (typeof sub.options === 'string' ? JSON.parse(sub.options) : sub.options) : {};
+    
+    document.getElementById('modalTitle').innerText = `Chi tiết Đăng ký #${sub.id}`;
+    
+    let html = '';
+    const escapeHtml = (unsafe) => {
+        return (unsafe || '').toString()
+             .replace(/&/g, "&amp;")
+             .replace(/</g, "&lt;")
+             .replace(/>/g, "&gt;")
+             .replace(/"/g, "&quot;")
+             .replace(/'/g, "&#039;");
+    };
+    const addRow = (label, value) => {
+      if (value) html += `<div class="detail-row"><div class="detail-label">${label}</div><div class="detail-value">${escapeHtml(value)}</div></div>`;
+    };
+    
+    addRow('Khách hàng', sub.customerName);
+    addRow('SĐT', sub.customerPhone);
+    addRow('Email', sub.customerEmail);
+    addRow('Chương trình', sub.tourName);
+    html += '<hr style="margin:16px 0;border:none;border-top:1px solid #e2e8f0;"/>';
+    addRow('Tháng đi', opts.month);
+    addRow('Công ty', opts.companyName);
+    addRow('Điểm đến', opts.destination);
+    addRow('Lưu trú', opts.hotelStandard);
+    addRow('Ngân sách', opts.budget);
+    addRow('Loại hình', opts.setupType);
+    addRow('Kênh liên hệ', opts.contactChannel);
+    addRow('Độ tuổi', opts.ageGroup);
+    addRow('Cam kết SK', opts.healthCommitment ? 'Có' : '');
+    addRow('Tư vấn Oxy', opts.oxygenConsult ? 'Có' : '');
+    addRow('Ghi chú (Khách)', opts.notes);
+    addRow('Ghi chú (Admin)', sub.notes);
+    
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('submissionModal').classList.add('show');
+  }
+  
+  function closeModal() {
+    document.getElementById('submissionModal').classList.remove('show');
+  }
+
+  async function updateStatus(id, status) {
+    try {
+      const res = await fetch('/api/admin/submissions', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        window.location.reload();
+      } else {
+        window.AppModal?.alert(data.error || 'Lỗi cập nhật', 'error') || alert(data.error);
+      }
+    } catch (err) {
+      window.AppModal?.alert('Lỗi kết nối', 'error') || alert('Lỗi kết nối');
+    }
+  }
+
+  async function deleteSubmission(id) {
+    const confirmed = window.AppModal ? await window.AppModal.confirm('Bạn có chắc muốn xóa đăng ký này?') : confirm('Bạn có chắc muốn xóa?');
+    if (!confirmed) return;
+    try {
+      const res = await fetch('/api/admin/submissions', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id })
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        window.location.reload();
+      } else {
+        window.AppModal?.alert(data.error || 'Lỗi xóa', 'error') || alert(data.error);
+      }
+    } catch (err) {
+      window.AppModal?.alert('Lỗi kết nối', 'error') || alert('Lỗi kết nối');
+    }
+  }
+</script>
+</AdminLayout>

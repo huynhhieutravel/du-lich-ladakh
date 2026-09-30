@@ -1,0 +1,788 @@
+---
+import AdminLayout from '@/layouts/AdminLayout.astro';
+import { env } from 'cloudflare:workers';
+
+const d1Db = env?.ladakh_d1;
+let posts: any[] = [];
+
+const q = Astro.url.searchParams.get('q') || '';
+let categoryFilter = Astro.url.searchParams.get('category') || '';
+const categorySlug = Astro.url.searchParams.get('categorySlug') || '';
+const authorFilter = Astro.url.searchParams.get('author') || '';
+const elementorFilter = Astro.url.searchParams.get('elementor') || '';
+const limitParam = parseInt(Astro.url.searchParams.get('limit') || '100');
+const validLimits = [30, 50, 100];
+const limit = validLimits.includes(limitParam) ? limitParam : 100;
+const pageParam = parseInt(Astro.url.searchParams.get('page') || '1');
+const page = pageParam > 0 ? pageParam : 1;
+const offset = (page - 1) * limit;
+const currentTab = Astro.url.searchParams.get('status') || 'all';
+
+let categories: any[] = [];
+let authorsList: string[] = [];
+let counts = { all: 0, published: 0, draft: 0, pending: 0, trash: 0 };
+
+if (d1Db) {
+  try {
+    const { results: countResults } = await d1Db.prepare("SELECT status, COUNT(*) as count FROM Post GROUP BY status").all();
+    if (countResults) {
+      countResults.forEach((row: any) => {
+        const s = (row.status || '').toLowerCase().trim();
+        const cnt = Number(row.count) || 0;
+        if (s === 'published' || s === 'publish') {
+          counts.published += cnt;
+          counts.all += cnt;
+        } else if (s === 'draft') {
+          counts.draft += cnt;
+          counts.all += cnt;
+        } else if (s === 'pending') {
+          counts.pending += cnt;
+          counts.all += cnt;
+        } else if (s === 'trash') {
+          counts.trash += cnt;
+        } else {
+          counts.all += cnt;
+        }
+      });
+    }
+    
+    const { results: catResults } = await d1Db.prepare("SELECT id, name, slug FROM BlogCategory ORDER BY name ASC").all();
+    categories = catResults || [];
+    
+    if (categorySlug) {
+      const cat = categories.find(c => c.slug === categorySlug);
+      if (cat) categoryFilter = String(cat.id);
+    }
+
+    const { results: authResults } = await d1Db.prepare("SELECT DISTINCT author FROM Post WHERE author IS NOT NULL AND author != ''").all();
+    const { results: userResults } = await d1Db.prepare('SELECT name FROM "User" WHERE name IS NOT NULL').all();
+    
+    const allAuthors = new Set<string>();
+    authResults?.forEach((r: any) => allAuthors.add(r.author));
+    userResults?.forEach((r: any) => allAuthors.add(r.name));
+    
+    authorsList = Array.from(allAuthors).sort();
+  } catch(e) {}
+}
+
+if (d1Db) {
+  try {
+    let baseWhere = `WHERE 1=1`;
+    const params: any[] = [];
+    
+    if (currentTab === 'trash') {
+      baseWhere += ` AND Post.status = 'trash'`;
+    } else if (currentTab === 'published') {
+      baseWhere += ` AND (Post.status = 'published' OR Post.status = 'publish')`;
+    } else if (currentTab !== 'all') {
+      baseWhere += ` AND Post.status = ?`;
+      params.push(currentTab);
+    } else {
+      baseWhere += ` AND Post.status != 'trash'`;
+    }
+
+    if (q) {
+      const normalizeStr = (str: string) => str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+      const keywords = q.split(' ').map(k => k.trim()).filter(k => k.length > 0);
+      if (keywords.length > 0) {
+        const conditions = keywords.map(() => `(Post.title LIKE ? OR Post.slug LIKE ?)`).join(' AND ');
+        baseWhere += ` AND (${conditions})`;
+        keywords.forEach(k => {
+          params.push(`%${k}%`);
+          params.push(`%${normalizeStr(k)}%`);
+        });
+      }
+    }
+    if (categoryFilter) {
+      baseWhere += ` AND (Post.categoryId = ? OR EXISTS (SELECT 1 FROM PostCategory WHERE PostCategory.postId = Post.id AND PostCategory.categoryId = ?))`;
+      params.push(categoryFilter, categoryFilter);
+    }
+    if (authorFilter) {
+      baseWhere += ` AND Post.author = ?`;
+      params.push(authorFilter);
+    }
+    if (elementorFilter) {
+      baseWhere += ` AND Post.isElementor = ?`;
+      params.push(elementorFilter === '1' ? 1 : 0);
+    }
+
+    
+    // Calculate actual filtered total
+    const countSql = `SELECT COUNT(*) as count FROM Post ${baseWhere}`;
+    let countQuery = d1Db.prepare(countSql);
+    if (params.length > 0) countQuery = countQuery.bind(...params);
+    const { results: filteredCountResults } = await countQuery.all();
+    let filteredTotal = counts.all;
+    if (filteredCountResults && filteredCountResults.length > 0) {
+      filteredTotal = filteredCountResults[0].count;
+    }
+
+    let sql = `
+      SELECT Post.*, BlogCategory.name as primaryCategoryName,
+             (SELECT GROUP_CONCAT(BlogCategory.name, ', ') 
+              FROM PostCategory 
+              JOIN BlogCategory ON PostCategory.categoryId = BlogCategory.id 
+              WHERE PostCategory.postId = Post.id) as categoryNames,
+             (SELECT GROUP_CONCAT(PostCategory.categoryId, ',') 
+              FROM PostCategory 
+              WHERE PostCategory.postId = Post.id) as categoryIds,
+             (SELECT GROUP_CONCAT(Tag.name, ', ') 
+              FROM PostTag 
+              JOIN Tag ON PostTag.tagId = Tag.id 
+              WHERE PostTag.postId = Post.id) as tags
+      FROM Post 
+      LEFT JOIN BlogCategory ON Post.categoryId = BlogCategory.id 
+      ${baseWhere}
+    `;
+    
+    sql += ` ORDER BY Post.createdAt DESC LIMIT ? OFFSET ?`;
+    
+    let query = d1Db.prepare(sql).bind(...params, limit, offset);
+    
+    const { results } = await query.all();
+    posts = results || [];
+
+    // Calculate pagination here to export to Astro scope
+    const totalPages = Math.ceil(filteredTotal / limit);
+    Object.assign(Astro.locals, { filteredTotal, totalPages });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+let filteredTotal = Astro.locals.filteredTotal !== undefined ? Astro.locals.filteredTotal : (currentTab === 'trash' ? counts.trash : counts[currentTab as keyof typeof counts] || counts.all);
+const totalPages = Astro.locals.totalPages !== undefined ? Astro.locals.totalPages : Math.ceil(filteredTotal / limit);
+
+function formatDate(dateStr: string) {
+  if (!dateStr) return '—';
+  const safeDate = typeof dateStr === 'string' ? dateStr.replace(' ', 'T') : dateStr;
+  const d = new Date(safeDate);
+  if (isNaN(d.getTime())) return dateStr;
+  const datePart = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const timePart = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  return `${datePart}<br/>${timePart}`;
+}
+---
+
+<AdminLayout title="All Posts" activeMenu="posts" activeSubmenu="all">
+<style>
+  .posts-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+  .posts-header h2 { font-size: 24px; font-weight: 700; }
+  .posts-header-right { display: flex; gap: 12px; align-items: center; }
+  .posts-header-right button, .posts-header-right a { padding: 6px 14px; border-radius: 8px; font-size: 13px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; text-decoration: none; }
+  .btn-primary { background: #2563eb !important; color: #fff !important; border-color: #2563eb !important; font-weight: 600; padding: 8px 20px !important; border-radius: 8px; }
+
+  .posts-body { display: block; }
+
+  /* Tabs */
+  .tabs { display: flex; gap: 0; border-bottom: 2px solid #e2e8f0; margin-bottom: 16px; }
+  .tabs a { padding: 10px 16px; font-size: 13px; font-weight: 500; color: #64748b; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; cursor: pointer; text-decoration: none; display: inline-block; }
+  .tabs a:hover { color: #0f172a; }
+  .tabs a.active { color: #2563eb; border-bottom-color: #2563eb; }
+  .tabs a.trash { color: #ef4444; border: 1px solid #fecaca; border-radius: 6px; margin-left: 8px; padding: 6px 12px; background: #fef2f2; }
+
+  /* Filters */
+  .filters { display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filters select, .filters button { padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 12px; color: #64748b; background: #fff; cursor: pointer; }
+  .filters .filter-btn { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; font-weight: 600; }
+  .filters .search-box { display: flex; margin-left: auto; }
+  .filters .search-box input { padding: 7px 12px; border: 1px solid #e2e8f0; border-radius: 8px 0 0 8px; font-size: 12px; width: 180px; outline: none; }
+  .filters .search-box button { border-radius: 0 8px 8px 0; border-left: none; background: #2563eb; color: #fff; font-weight: 600; padding: 7px 14px; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  thead th { text-align: left; padding: 12px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; color: #94a3b8; font-weight: 600; border-bottom: 1px solid #e2e8f0; }
+  th.col-check { width: 44px; }
+  th.col-title { width: 40%; }
+  th.col-author { width: 10%; }
+  th.col-cat { width: 14%; }
+  th.col-tags { width: 18%; }
+  th.col-date { width: 12%; }
+  tbody td { padding: 14px; font-size: 13px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr:hover { background: #f8fafc; }
+  .post-cell { display: flex; align-items: center; gap: 12px; }
+  .post-cell img { width: 44px; height: 44px; border-radius: 8px; object-fit: cover; flex-shrink: 0; background: #f1f5f9; }
+  .post-cell .img-placeholder { width: 44px; height: 44px; border-radius: 8px; background: #e2e8f0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-size: 18px; }
+  .post-cell a { font-weight: 600; color: #0f172a; text-decoration: none; }
+  .post-cell a:hover { color: #2563eb; }
+  
+  .cat-badge { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; white-space: nowrap; display: inline-block; background: #f1f5f9; color: #475569; }
+  .cat-badge.published { background:#dcfce7; color:#16a34a; }
+  .cat-badge.draft { background:#fef3c7; color:#d97706; }
+  .cat-badge.trash { background:#fef2f2; color:#ef4444; }
+
+  .tags-cell { font-size: 12px; color: #64748b; }
+  .date-cell { color: #64748b; font-size: 12px; white-space: nowrap; }
+  .row-actions { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
+  .action-link { font-size: 11px; text-decoration: none; cursor: pointer; display: inline-block; background: none; border: none; padding: 0; }
+  .action-edit { color: #2563eb; }
+  .action-delete { color: #ef4444; }
+  .action-view { color: #64748b; }
+  td input[type="checkbox"], th input[type="checkbox"] { width: 16px; height: 16px; accent-color: #2563eb; }
+
+  /* Bottom bulk */
+  .bulk-bar { display: flex; align-items: center; gap: 8px; padding: 14px; border-top: 1px solid #e2e8f0; }
+  .bulk-bar select { padding: 6px 10px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 12px; }
+  .bulk-bar button { padding: 6px 14px; border: 1px solid #2563eb; border-radius: 6px; background: #fff; color: #2563eb; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .bulk-bar .count { margin-left: auto; font-size: 12px; color: #94a3b8; }
+
+  /* Pagination */
+  .page-btn { padding: 4px 10px; border: 1px solid #e2e8f0; border-radius: 6px; text-decoration: none; color: #64748b; font-size: 13px; background: #fff; line-height: 1; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; font-weight: 600; }
+  .page-btn:hover { border-color: #cbd5e1; color: #0f172a; }
+  .page-btn.disabled { opacity: 0.5; pointer-events: none; }
+  .page-input { width: 44px; padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 6px; text-align: center; font-size: 13px; outline: none; margin: 0 4px; }
+  /* hide arrows in number input */
+  .page-input::-webkit-outer-spin-button, .page-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  .page-input[type=number] { -moz-appearance: textfield; }
+</style>
+
+<!-- Header -->
+<div class="posts-header">
+  <h2>Posts</h2>
+  <div class="posts-header-right">
+    <select id="perPageSelect" style="padding: 6px 14px; border-radius: 8px; font-size: 13px; border: 1px solid #e2e8f0; background: #fff; color: #64748b; cursor: pointer; outline: none;" onchange="window.location.href='?limit='+this.value">
+      <option value="30" selected={limit === 30}>30 items</option>
+      <option value="50" selected={limit === 50}>50 items</option>
+      <option value="100" selected={limit === 100}>100 items</option>
+    </select>
+    <a href="/admin/posts/edit" class="btn-primary">Add New Post ▼</a>
+  </div>
+</div>
+
+<div class="posts-body">
+  <div>
+    <!-- Tabs -->
+    <div class="tabs">
+      <a href="/admin/posts?status=all" class={currentTab === 'all' ? 'active' : ''}>All ({counts.all})</a>
+      <a href="/admin/posts?status=published" class={currentTab === 'published' ? 'active' : ''}>Published ({counts.published})</a>
+      <a href="/admin/posts?status=draft" class={currentTab === 'draft' ? 'active' : ''}>Drafts ({counts.draft})</a>
+      <a href="/admin/posts?status=pending" class={currentTab === 'pending' ? 'active' : ''}>Pending ({counts.pending})</a>
+      <a href="/admin/posts?status=trash" class={`trash ${currentTab === 'trash' ? 'active' : ''}`}>Trash ({counts.trash})</a>
+    </div>
+
+    <!-- Filters -->
+    <form class="filters" method="GET" action="/admin/posts" style="align-items: center;">
+      {currentTab !== 'all' && <input type="hidden" name="status" value={currentTab} />}
+      <select id="bulkActionSelect">
+        <option value="">Bulk actions</option>
+        {currentTab === 'trash' ? (
+          <>
+            <option value="restore">Khôi phục</option>
+            <option value="permanent-delete">Xóa vĩnh viễn</option>
+          </>
+        ) : (
+          <>
+            <option value="edit">Edit</option>
+            <option value="trash">Move to Trash</option>
+          </>
+        )}
+      </select>
+      <button type="button" id="bulkApplyBtn">Apply</button>
+      <button type="button" id="copyLinksBtn" class="filter-btn" style="display:none; margin-left:8px;" onclick="copySelectedLinks()">Copy Links</button>
+      <select name="category">
+        <option value="">All Categories</option>
+        {categories.map((cat: any) => (
+          <option value={cat.id} selected={categoryFilter === cat.id}>{cat.name}</option>
+        ))}
+      </select>
+
+      <select name="author">
+        <option value="">All Authors</option>
+        {authorsList.map((auth: string) => (
+          <option value={auth} selected={authorFilter === auth}>{auth}</option>
+        ))}
+      </select>
+
+      <select name="elementor">
+        <option value="">Mọi định dạng</option>
+        <option value="0" selected={elementorFilter === '0'}>Astro Native 🚀</option>
+        <option value="1" selected={elementorFilter === '1'}>Elementor HTML</option>
+      </select>
+
+      <button type="submit" class="filter-btn">Filter</button>
+      
+      <!-- Top Pagination -->
+      <div style="display: flex; align-items: center; gap: 12px; margin-left: auto;">
+        <span style="font-size: 12px; color: #64748b; font-weight: 600;">{filteredTotal} items</span>
+        {totalPages > 1 && (
+          <div style="display: flex; gap: 4px; align-items: center;">
+            <a href={`?page=1&limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}`} class={`page-btn ${page === 1 ? 'disabled' : ''}`} aria-label="Trang đầu">«</a>
+            <a href={`?page=${Math.max(1, page - 1)}&limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}`} class={`page-btn ${page === 1 ? 'disabled' : ''}`} aria-label="Trang trước">‹</a>
+            <span style="font-size: 13px; color: #64748b; font-weight: 500;">
+              <input type="number" class="page-input" value={page} min="1" max={totalPages} onkeydown={`if(event.key==='Enter') window.location.href='?limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}&page='+this.value`} />
+              of {totalPages}
+            </span>
+            <a href={`?page=${Math.min(totalPages, page + 1)}&limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}`} class={`page-btn ${page === totalPages ? 'disabled' : ''}`} aria-label="Trang sau">›</a>
+            <a href={`?page=${totalPages}&limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}`} class={`page-btn ${page === totalPages ? 'disabled' : ''}`} aria-label="Trang cuối">»</a>
+          </div>
+        )}
+      </div>
+
+      <div class="search-box" style="margin-left: 12px;">
+        <input type="text" name="q" placeholder="Search posts..." value={q} />
+        <button type="submit">Search</button>
+      </div>
+    </form>
+
+    <!-- Table -->
+    <div class="card" style="overflow:hidden;">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-check"><input type="checkbox" id="selectAllCheckbox" /></th>
+            <th class="col-title">Title</th>
+            <th class="col-author">Author</th>
+            <th class="col-cat">Category / Status</th>
+            <th class="col-tags">Tags</th>
+            <th class="col-date">Date ⬇</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- BULK EDIT ROW -->
+          <tr id="bulkEditRow" style="display: none; background: #f8fafc; border-bottom: 2px solid #e2e8f0; border-top: 2px solid #e2e8f0;">
+            <td colspan="6" style="padding: 20px;">
+              <h3 style="font-size: 14px; font-weight: 700; margin-bottom: 12px; color: #0f172a;">CHỈNH SỬA HÀNG LOẠT</h3>
+              <div style="display: flex; gap: 40px;">
+                <div style="width: 30%;">
+                  <strong style="font-size: 12px; color: #64748b; display: block; margin-bottom: 8px;">Bài viết đã chọn:</strong>
+                  <ul id="bulkSelectedList" style="list-style: none; padding: 0; margin: 0; font-size: 13px; max-height: 150px; overflow-y: auto; color: #0f172a; display: flex; flex-direction: column; gap: 4px;"></ul>
+                </div>
+                <div style="flex: 1; display: flex; gap: 40px;">
+                  <div>
+                    <label style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px; font-weight: 600;">Danh mục</label>
+                    <div style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; height: 120px; overflow-y: auto; background: #fff; min-width: 180px;">
+                      <ul style="list-style: none; margin: 0; padding: 0; font-size: 13px; display: flex; flex-direction: column; gap: 6px; color: #475569;">
+                        {categories.map((cat: any) => (
+                          <li>
+                            <label style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                              <input type="checkbox" class="bulk-cat-checkbox" value={cat.id} style="width: 14px; height: 14px;" />
+                              {cat.name}
+                            </label>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  <div>
+                    <label style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px; font-weight: 600;">Trạng thái</label>
+                    <select id="bulkStatus" style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; min-width: 150px;">
+                      <option value="">— Không đổi —</option>
+                      <option value="published">Đã xuất bản</option>
+                      <option value="draft">Bản nháp</option>
+                      <option value="pending">Chờ duyệt</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style="font-size: 12px; color: #64748b; display: block; margin-bottom: 4px; font-weight: 600;">Tác giả</label>
+                    <select id="bulkAuthor" style="padding: 6px 12px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 13px; min-width: 150px;">
+                      <option value="NO_CHANGE">— Không đổi —</option>
+                      {authorsList.map((auth: string) => (
+                        <option value={auth}>{auth}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top: 20px; display: flex; gap: 12px;">
+                <button type="button" id="bulkUpdateBtn" style="background: #2563eb; color: #fff; padding: 6px 16px; border-radius: 6px; border: none; font-size: 13px; font-weight: 600; cursor: pointer;">Cập nhật</button>
+                <button type="button" id="bulkCancelBtn" style="background: #fff; color: #64748b; border: 1px solid #e2e8f0; padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;">Hủy</button>
+              </div>
+            </td>
+          </tr>
+          {posts.length === 0 && (
+            <tr>
+              <td colspan="6" style="text-align:center; padding: 40px; color: #94a3b8;">No posts found.</td>
+            </tr>
+          )}
+          {posts.map((post) => {
+            const displayCat = post.categoryNames || post.primaryCategoryName || 'Uncategorized';
+            const allCatIds = post.categoryIds ? post.categoryIds.split(',') : (post.categoryId ? [post.categoryId] : []);
+            return (
+            <tr data-id={post.id} data-categories={allCatIds.join(',')} class="post-row" style="cursor:pointer;">
+              <td><input type="checkbox" class="post-checkbox" value={post.id} data-title={post.title} data-url={`https://dulichladakh.com/${(post.slug || '').replace(/^\//, '')}`} /></td>
+              <td>
+                <div class="post-cell">
+                  {post.featuredImage ? (
+                    <img src={post.featuredImage} alt={post.title} />
+                  ) : (
+                    <div class="img-placeholder">📄</div>
+                  )}
+                  <div style="display:flex; flex-direction:column; gap:2px;">
+                    <a href={`/admin/posts/edit?id=${post.id}`} style="display: flex; align-items: center; gap: 6px;">
+                      {post.format === 'astro-code' ? (
+                        <span style="background: #e0e7ff; color: #4338ca; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; flex-shrink: 0;" title="Trang được code tay (Hard-code) bằng Astro">Astro 🚀</span>
+                      ) : post.isElementor ? (
+                        <span style="background: #f1f5f9; color: #64748b; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; flex-shrink: 0;" title="Trang chưa được dọn dẹp mã nguồn Elementor">Elementor</span>
+                      ) : (
+                        <span style="background: #f0fdf4; color: #166534; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; flex-shrink: 0;" title="Trang Tiptap tiêu chuẩn">Tiptap ✍️</span>
+                      )}
+                      <span>{post.title || '(Untitled)'}</span>
+                    </a>
+                    <div class="row-actions">
+                      {post.status === 'trash' ? (
+                        <>
+                          <button class="action-link" style="color:#047857;font-weight:600" onclick={`restorePost('${post.id}')`}>Khôi phục</button>
+                          <button class="action-link action-delete" onclick={`permanentDeletePost('${post.id}')`}>Xóa vĩnh viễn</button>
+                        </>
+                      ) : (
+                        <>
+                          <a href={`/admin/posts/edit?id=${post.id}`} class="action-link action-edit">Edit</a>
+                          <a href={`/${post.slug}`} target="_blank" class="action-link action-view">View</a>
+                          <button class="action-link action-delete" onclick={`deletePost('${post.id}')`}>Trash</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td>{post.author || 'Admin'}</td>
+              <td>
+                <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-start;">
+                  <span class="cat-badge">{displayCat}</span>
+                  <span class={`cat-badge ${post.status}`} style="font-size: 10px; padding: 2px 6px;">{post.status}</span>
+                </div>
+              </td>
+              <td class="tags-cell">{post.tags || '—'}</td>
+              <td class="date-cell" set:html={formatDate(post.createdAt)}></td>
+            </tr>
+          )})}
+        </tbody>
+      </table>
+
+      <div class="bulk-bar" style="display: flex; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <select id="bottomBulkAction"><option value="">Bulk actions</option></select>
+          <button type="button">Apply</button>
+          <button type="button" id="copyLinksBtnBottom" class="filter-btn" style="display:none; margin-left:8px;" onclick="copySelectedLinks()">Copy Links</button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px;">
+          <span class="count">{filteredTotal} items</span>
+          {totalPages > 1 && (
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <a href={`?page=1&limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}`} class={`page-btn ${page === 1 ? 'disabled' : ''}`} aria-label="Trang đầu">«</a>
+              <a href={`?page=${Math.max(1, page - 1)}&limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}`} class={`page-btn ${page === 1 ? 'disabled' : ''}`} aria-label="Trang trước">‹</a>
+              <span style="font-size: 13px; color: #64748b; font-weight: 500;">
+                <input type="number" class="page-input" value={page} min="1" max={totalPages} onkeydown={`if(event.key==='Enter') window.location.href='?limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}&page='+this.value`} />
+                of {totalPages}
+              </span>
+              <a href={`?page=${Math.min(totalPages, page + 1)}&limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}`} class={`page-btn ${page === totalPages ? 'disabled' : ''}`} aria-label="Trang sau">›</a>
+              <a href={`?page=${totalPages}&limit=${limit}&status=${currentTab}&q=${q}&category=${categoryFilter}&author=${encodeURIComponent(authorFilter)}&elementor=${elementorFilter}`} class={`page-btn ${page === totalPages ? 'disabled' : ''}`} aria-label="Trang cuối">»</a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  const selectAll = document.getElementById('selectAllCheckbox');
+  const postCheckboxes = document.querySelectorAll('.post-checkbox');
+  const bulkActionSelect = document.getElementById('bulkActionSelect');
+  const bulkApplyBtn = document.getElementById('bulkApplyBtn');
+  const bulkEditRow = document.getElementById('bulkEditRow');
+  const bulkSelectedList = document.getElementById('bulkSelectedList');
+  const bulkCancelBtn = document.getElementById('bulkCancelBtn');
+  const bulkUpdateBtn = document.getElementById('bulkUpdateBtn');
+
+  if (selectAll) {
+    selectAll.addEventListener('change', (e) => {
+      postCheckboxes.forEach(cb => cb.checked = e.target.checked);
+      updateCopyButton();
+    });
+  }
+
+  // Row selection logic (Shift, Alt, Click)
+  let lastChecked = null;
+  const postRows = document.querySelectorAll('.post-row');
+  
+  postRows.forEach(tr => {
+    tr.addEventListener('click', function(e) {
+      if (['A', 'BUTTON', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      const cb = this.querySelector('.post-checkbox');
+      if (!cb) return;
+
+      if (e.target.tagName !== 'INPUT') {
+        if (e.shiftKey && lastChecked) {
+          const checkboxesArr = Array.from(postCheckboxes);
+          const start = checkboxesArr.indexOf(cb);
+          const end = checkboxesArr.indexOf(lastChecked);
+          const inBetween = checkboxesArr.slice(Math.min(start, end), Math.max(start, end) + 1);
+          const targetState = !cb.checked;
+          inBetween.forEach(c => c.checked = targetState);
+        } else if (e.metaKey || e.ctrlKey || e.altKey) {
+          cb.checked = !cb.checked;
+        } else {
+          cb.checked = !cb.checked;
+        }
+      } else {
+        if (e.shiftKey && lastChecked) {
+          const checkboxesArr = Array.from(postCheckboxes);
+          const start = checkboxesArr.indexOf(cb);
+          const end = checkboxesArr.indexOf(lastChecked);
+          const inBetween = checkboxesArr.slice(Math.min(start, end), Math.max(start, end) + 1);
+          inBetween.forEach(c => c.checked = cb.checked);
+        }
+      }
+      
+      lastChecked = cb;
+      updateCopyButton();
+    });
+  });
+
+  function updateCopyButton() {
+    const copyBtn = document.getElementById('copyLinksBtn');
+    const copyBtnBottom = document.getElementById('copyLinksBtnBottom');
+    const selected = Array.from(postCheckboxes).filter(cb => cb.checked);
+    if (copyBtn) copyBtn.style.display = selected.length > 0 ? 'inline-block' : 'none';
+    if (copyBtnBottom) copyBtnBottom.style.display = selected.length > 0 ? 'inline-block' : 'none';
+  }
+
+  window.copySelectedLinks = function() {
+    const selected = Array.from(postCheckboxes).filter(cb => cb.checked);
+    const links = selected.map(cb => cb.getAttribute('data-url')).filter(Boolean).join('\n');
+    if (links) {
+      navigator.clipboard.writeText(links);
+      window.AppModal.alert(`Đã copy ${selected.length} link vào clipboard!`, 'success');
+      
+      // Optional: uncheck all after copy
+      postCheckboxes.forEach(cb => cb.checked = false);
+      if (selectAll) selectAll.checked = false;
+      updateCopyButton();
+    }
+  }
+
+  // Three-state Checkbox Logic
+  const bulkCatCheckboxes = document.querySelectorAll('.bulk-cat-checkbox');
+  
+  function updateCheckboxStates(selectedRows) {
+    // Collect all categories present in the selected rows
+    const catMap = {}; // categoryId => count
+    selectedRows.forEach(row => {
+      const cats = row.getAttribute('data-categories').split(',').filter(c => c);
+      cats.forEach(c => {
+        catMap[c] = (catMap[c] || 0) + 1;
+      });
+    });
+
+    const totalSelected = selectedRows.length;
+
+    bulkCatCheckboxes.forEach(cb => {
+      // Custom states: 0 = unchecked, 1 = checked (all), 2 = indeterminate (some)
+      const count = catMap[cb.value] || 0;
+      if (count === 0) {
+        cb.checked = false;
+        cb.indeterminate = false;
+        cb.dataset.state = '0';
+      } else if (count === totalSelected) {
+        cb.checked = true;
+        cb.indeterminate = false;
+        cb.dataset.state = '1';
+      } else {
+        cb.checked = false;
+        cb.indeterminate = true;
+        cb.dataset.state = '2';
+      }
+    });
+  }
+
+  // Handle clicking on indeterminate checkboxes manually to cycle states properly
+  bulkCatCheckboxes.forEach(cb => {
+    cb.addEventListener('click', function(e) {
+      if (this.dataset.state === '2') {
+        // Was indeterminate, click makes it fully checked
+        this.checked = true;
+        this.indeterminate = false;
+        this.dataset.state = '1';
+      } else if (this.dataset.state === '1') {
+        // Was checked, click makes it unchecked
+        this.checked = false;
+        this.indeterminate = false;
+        this.dataset.state = '0';
+      } else {
+        // Was unchecked, click makes it fully checked
+        this.checked = true;
+        this.indeterminate = false;
+        this.dataset.state = '1';
+      }
+    });
+  });
+
+  if (bulkApplyBtn) {
+    bulkApplyBtn.addEventListener('click', async () => {
+      const action = bulkActionSelect.value;
+      const selected = Array.from(postCheckboxes).filter(cb => cb.checked);
+      
+      if (selected.length === 0) {
+        window.AppModal.alert('Vui lòng chọn ít nhất 1 bài viết!', 'error');
+        return;
+      }
+
+      const ids = selected.map(cb => cb.value);
+
+      if (action === 'trash') {
+        const confirmed = await window.AppModal.confirm(`Bạn có chắc muốn chuyển ${selected.length} bài viết vào thùng rác?`);
+        if (!confirmed) return;
+        try {
+          const res = await fetch('/api/admin/posts/bulk', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postIds: ids, data: { status: 'trash' } })
+          });
+          const resData = await res.json();
+          if (res.ok && resData.success) window.location.reload();
+          else window.AppModal.alert(resData.error?.message || 'Lỗi chuyển vào thùng rác', 'error');
+        } catch(e) { window.AppModal.alert('Lỗi kết nối', 'error'); }
+      } else if (action === 'restore') {
+        const confirmed = await window.AppModal.confirm(`Khôi phục ${selected.length} bài viết về trạng thái Nháp?`);
+        if (!confirmed) return;
+        try {
+          const res = await fetch('/api/admin/posts/bulk', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ postIds: ids, data: { status: 'draft' } })
+          });
+          const resData = await res.json();
+          if (res.ok && resData.success) window.location.reload();
+          else window.AppModal.alert(resData.error?.message || 'Lỗi khôi phục', 'error');
+        } catch(e) { window.AppModal.alert('Lỗi kết nối', 'error'); }
+      } else if (action === 'permanent-delete') {
+        const confirmed = await window.AppModal.confirm(`⚠️ XÓA VĨNH VIỄN ${selected.length} bài viết?\nHành động này KHÔNG THỂ hoàn tác! Slug URL sẽ được giải phóng.`);
+        if (!confirmed) return;
+        let successCount = 0;
+        for (const id of ids) {
+          try {
+            const res = await fetch(`/api/admin/posts/${id}?permanent=1`, { method: 'DELETE' });
+            if (res.ok) successCount++;
+          } catch(e) {}
+        }
+        window.AppModal.alert(`Đã xóa vĩnh viễn ${successCount}/${ids.length} bài viết.`, 'success');
+        window.location.reload();
+      } else if (action === 'edit') {
+        bulkSelectedList.innerHTML = '';
+        const selectedRows = selected.map(cb => cb.closest('tr'));
+        
+        selected.forEach(cb => {
+          const li = document.createElement('li');
+          li.textContent = `✖ ${cb.getAttribute('data-title')}`;
+          bulkSelectedList.appendChild(li);
+        });
+        
+        updateCheckboxStates(selectedRows);
+        bulkEditRow.style.display = 'table-row';
+      }
+    });
+  }
+
+  if (bulkCancelBtn) {
+    bulkCancelBtn.addEventListener('click', () => {
+      bulkEditRow.style.display = 'none';
+    });
+  }
+
+  if (bulkUpdateBtn) {
+    bulkUpdateBtn.addEventListener('click', async () => {
+      // Gather intended states of categories
+      const categoryChanges = { add: [], remove: [] };
+      document.querySelectorAll('.bulk-cat-checkbox').forEach(cb => {
+        if (cb.dataset.state === '1') categoryChanges.add.push(cb.value);
+        if (cb.dataset.state === '0') categoryChanges.remove.push(cb.value);
+      });
+
+      const status = document.getElementById('bulkStatus').value;
+      const authorVal = document.getElementById('bulkAuthor').value;
+      const author = authorVal === 'NO_CHANGE' ? undefined : authorVal;
+      const selected = Array.from(postCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+      if (categoryChanges.add.length === 0 && categoryChanges.remove.length === 0 && !status && author === undefined) {
+        window.AppModal.alert('Vui lòng chọn ít nhất 1 trường để thay đổi!', 'error');
+        return;
+      }
+
+      bulkUpdateBtn.textContent = 'Đang cập nhật...';
+      bulkUpdateBtn.disabled = true;
+
+      try {
+        const res = await fetch('/api/admin/posts/bulk', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ postIds: selected, data: { categoryChanges, status, author } })
+        });
+        const resData = await res.json();
+        if (res.ok && resData.success) window.location.reload();
+        else {
+          window.AppModal.alert(resData.error?.message || 'Lỗi cập nhật', 'error');
+          bulkUpdateBtn.textContent = 'Cập nhật';
+          bulkUpdateBtn.disabled = false;
+        }
+      } catch(e) {
+        window.AppModal.alert('Lỗi kết nối', 'error');
+        bulkUpdateBtn.textContent = 'Cập nhật';
+        bulkUpdateBtn.disabled = false;
+      }
+    });
+  }
+
+  async function deletePost(id) {
+    const confirmed = await window.AppModal.confirm('Bạn có chắc muốn chuyển bài viết này vào thùng rác?');
+    if (!confirmed) return;
+    
+    try {
+      const res = await fetch(`/api/admin/posts/${id}`, {
+        method: 'DELETE',
+      });
+      const resData = await res.json();
+      
+      if (res.ok && resData.success) {
+        window.location.reload();
+      } else {
+        window.AppModal.alert(resData.error?.message || 'Lỗi khi xóa bài viết', 'error');
+      }
+    } catch (e) {
+      window.AppModal.alert('Lỗi kết nối đến máy chủ', 'error');
+    }
+  }
+
+  async function restorePost(id) {
+    const confirmed = await window.AppModal.confirm('Khôi phục bài viết này về trạng thái Nháp?');
+    if (!confirmed) return;
+    
+    try {
+      const res = await fetch(`/api/admin/posts/${id}`, {
+        method: 'PATCH',
+      });
+      const resData = await res.json();
+      
+      if (res.ok && resData.success) {
+        window.AppModal.alert('Đã khôi phục bài viết thành công!', 'success');
+        window.location.reload();
+      } else {
+        window.AppModal.alert(resData.error?.message || 'Lỗi khi khôi phục', 'error');
+      }
+    } catch (e) {
+      window.AppModal.alert('Lỗi kết nối đến máy chủ', 'error');
+    }
+  }
+
+  async function permanentDeletePost(id) {
+    const confirmed = await window.AppModal.confirm('⚠️ XÓA VĨNH VIỄN bài viết này?\nHành động này KHÔNG THỂ hoàn tác! Slug URL sẽ được giải phóng.');
+    if (!confirmed) return;
+    
+    try {
+      const res = await fetch(`/api/admin/posts/${id}?permanent=1`, {
+        method: 'DELETE',
+      });
+      const resData = await res.json();
+      
+      if (res.ok && resData.success) {
+        window.AppModal.alert('Đã xóa vĩnh viễn!', 'success');
+        window.location.reload();
+      } else {
+        window.AppModal.alert(resData.error?.message || 'Lỗi khi xóa vĩnh viễn', 'error');
+      }
+    } catch (e) {
+      window.AppModal.alert('Lỗi kết nối đến máy chủ', 'error');
+    }
+  }
+</script>
+</AdminLayout>

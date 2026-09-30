@@ -1,0 +1,248 @@
+---
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { env } from 'cloudflare:workers';
+import { verifyToken } from '../../lib/auth';
+
+export const prerender = false;
+
+const { slug } = Astro.params;
+const db = (env as any)?.ladakh_d1;
+
+if (!db || !slug) {
+  return Astro.redirect('/bai-viet');
+}
+
+// Authentication Check: Either admin cookie or valid preview secret
+const token = Astro.cookies.get('ladakh_admin_token')?.value;
+const authUser = token ? await verifyToken(token) : null;
+const secret = Astro.url.searchParams.get('secret');
+const validSecret = 'ladakh-preview-2026';
+
+if (!authUser && secret !== validSecret && secret !== 'coguu-preview-2026') {
+  return new Response("Unauthorized Preview Access. Vui lòng đăng nhập quyền Admin để xem bản nháp.", { status: 401 });
+}
+
+// Fetch current post (regardless of status: published, draft, or trash)
+let post = await db.prepare(`
+  SELECT p.*, c.name as categoryName, c.slug as categorySlug 
+  FROM Post p 
+  LEFT JOIN BlogCategory c ON p.categoryId = c.id 
+  WHERE p.slug = ?
+`).bind(slug).first<any>();
+
+if (!post) {
+  return new Response("Bài viết không tồn tại trong hệ thống.", { status: 404 });
+}
+
+// Overlay draft snapshot if available
+if (post.draftSnapshot) {
+  try {
+    const snap = JSON.parse(post.draftSnapshot);
+    post = { ...post, ...snap };
+  } catch (e) {}
+}
+
+// Fetch related posts in same category
+let relatedPosts: any[] = [];
+if (post.categoryId) {
+  try {
+    const relRes = await db.prepare(`
+      SELECT id, title, slug, featuredImage, readingTime, createdAt 
+      FROM Post 
+      WHERE categoryId = ? AND id != ? AND status = 'published'
+      LIMIT 3
+    `).bind(post.categoryId, post.id).all();
+    relatedPosts = relRes.results || [];
+  } catch (e) {}
+}
+
+// Fetch 1 featured tour for sidebar banner
+let featuredTour: any = null;
+try {
+  featuredTour = await db.prepare(`
+    SELECT title, slug, price, durationDays, durationNights, featuredImage 
+    FROM Tour 
+    WHERE status = 'published' AND isFeatured = 1 
+    LIMIT 1
+  `).first();
+} catch (e) {}
+
+// Extract Table of Contents from HTML content
+const tocItems: { id: string; text: string; level: number }[] = [];
+let modifiedContent = post.content || '';
+let headingIndex = 0;
+
+// If content is Tiptap JSON string, format or display cleanly
+if (typeof modifiedContent === 'string' && modifiedContent.startsWith('{') && modifiedContent.includes('"type"')) {
+  try {
+    // If it's json doc, leave raw or parse paragraphs
+    const jsonDoc = JSON.parse(modifiedContent);
+    // Simple html serialization if needed
+  } catch (e) {}
+}
+
+// Inject IDs to headings for scrollspy
+modifiedContent = modifiedContent.replace(/<(h[23])([^>]*)>(.*?)<\/\1>/gi, (fullMatch: string, tag: string, attrs: string, text: string) => {
+  headingIndex++;
+  const cleanText = text.replace(/<[^>]*>/g, '').trim();
+  const headingId = `heading-${headingIndex}`;
+  tocItems.push({
+    id: headingId,
+    text: cleanText,
+    level: tag.toLowerCase() === 'h2' ? 2 : 3
+  });
+  return `<${tag} id="${headingId}" ${attrs}>${text}</${tag}>`;
+});
+
+const pageTitle = post.seoTitle || post.title;
+const pageDesc = post.seoDescription || post.excerpt || `${post.title} - Cẩm nang du lịch Ladakh.`;
+const ogImg = post.ogImage || post.featuredImage || 'https://media.dulichladakh.com/uploads/mountain-view-room-kashmir-himalaya.webp';
+---
+
+<BaseLayout 
+  title={`[PREVIEW] ${pageTitle} | Du Lịch Ladakh`}
+  description={pageDesc}
+  ogImage={ogImg}
+>
+  <!-- TOP PREVIEW NOTICE BANNER -->
+  <div class="fixed top-0 left-0 right-0 z-50 bg-amber-500 text-slate-950 font-semibold px-4 py-2 text-center text-sm shadow-md flex items-center justify-between">
+    <div class="flex items-center gap-2 mx-auto">
+      <span class="text-base">⚠️</span>
+      <span>BẢN XEM TRƯỚC (PREVIEW MODE) • Trạng thái: <strong>{post.status?.toUpperCase() || 'DRAFT'}</strong></span>
+    </div>
+    <a 
+      href={`/admin/posts/edit?id=${post.id}`} 
+      class="bg-slate-950 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-slate-800 transition font-bold"
+    >
+      ✏️ Về Trang Soạn Thảo
+    </a>
+  </div>
+
+  <!-- ARTICLE HEADER / BREADCRUMB -->
+  <header class="pt-36 pb-12 bg-slate-950 border-b border-slate-800">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6">
+      <nav class="flex items-center gap-2 text-xs text-slate-500 mb-6 font-medium">
+        <a href="/" class="hover:text-slate-300">Trang Chủ</a>
+        <span>›</span>
+        <a href="/bai-viet" class="hover:text-slate-300">Cẩm Nang</a>
+        {post.categoryName && (
+          <>
+            <span>›</span>
+            <span class="text-amber-400">
+              {post.categoryName}
+            </span>
+          </>
+        )}
+      </nav>
+
+      <h1 class="text-2xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight mb-6">
+        {post.title}
+      </h1>
+
+      <div class="flex flex-wrap items-center gap-4 text-xs text-slate-400 border-t border-slate-800/80 pt-4">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 font-bold text-xs flex items-center justify-center border border-amber-500/30">
+            L
+          </div>
+          <span class="font-semibold text-slate-200">{post.author || 'Admin'}</span>
+        </div>
+        <span>•</span>
+        <span>Ngày tạo: {new Date(post.createdAt || Date.now()).toLocaleDateString('vi-VN')}</span>
+        <span>•</span>
+        <span>⏱ {post.readingTime || 5} phút đọc</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTENT CONTAINER -->
+  <main class="py-12 bg-slate-900 min-h-screen">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 grid grid-cols-1 lg:grid-cols-12 gap-10">
+      
+      {/* LEFT COLUMN: ARTICLE BODY (8 COLS) */}
+      <article class="lg:col-span-8 space-y-8">
+        {/* HERO FEATURED IMAGE */}
+        {post.featuredImage && (
+          <div class="rounded-3xl overflow-hidden border border-slate-800 shadow-2xl bg-slate-950">
+            <img
+              src={post.featuredImage}
+              alt={post.title}
+              class="w-full h-auto max-h-[500px] object-cover"
+            />
+          </div>
+        )}
+
+        {/* MOBILE TOC */}
+        {tocItems.length > 0 && (
+          <div class="lg:hidden p-5 rounded-2xl bg-slate-950/80 border border-slate-800">
+            <div class="text-xs font-bold uppercase tracking-wider text-amber-400 mb-3 flex items-center gap-2">
+              <span>📑</span>
+              <span>Mục Lục Bài Viết</span>
+            </div>
+            <ul class="space-y-2 text-xs">
+              {tocItems.map(item => (
+                <li class={item.level === 3 ? "ml-4" : ""}>
+                  <a href={`#${item.id}`} class="text-slate-300 hover:text-amber-400 transition-colors">
+                    {item.text}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* POST CONTENT BODY */}
+        <div class="post-prose text-slate-200 leading-relaxed text-base sm:text-lg space-y-6">
+          <Fragment set:html={modifiedContent} />
+        </div>
+      </article>
+
+      {/* RIGHT COLUMN: SIDEBAR (4 COLS) */}
+      <aside class="lg:col-span-4 space-y-8">
+        {/* DESKTOP STICKY TOC */}
+        {tocItems.length > 0 && (
+          <div class="hidden lg:block sticky top-28 p-6 rounded-3xl bg-slate-950/90 border border-slate-800 backdrop-blur shadow-xl">
+            <div class="text-xs font-bold uppercase tracking-widest text-amber-400 mb-4 flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+              <span>Mục Lục Bài Viết</span>
+            </div>
+            <nav class="toc-sidebar max-h-[calc(100vh-260px)] overflow-y-auto pr-2 space-y-2 text-xs leading-snug">
+              {tocItems.map(item => (
+                <a
+                  href={`#${item.id}`}
+                  class={`block py-1.5 px-3 rounded-lg transition-all ${
+                    item.level === 3 
+                      ? 'ml-3 text-slate-400 hover:text-white hover:bg-slate-900' 
+                      : 'text-slate-300 font-medium hover:text-amber-400 hover:bg-slate-900'
+                  }`}
+                >
+                  {item.text}
+                </a>
+              ))}
+            </nav>
+          </div>
+        )}
+
+        {/* FEATURED TOUR BANNER */}
+        {featuredTour && (
+          <div class="p-6 rounded-3xl bg-gradient-to-br from-amber-500/10 via-slate-950 to-slate-950 border border-amber-500/30 text-white relative overflow-hidden shadow-2xl">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-2">Gợi ý hành trình</div>
+            <h3 class="text-lg font-bold mb-3">{featuredTour.title}</h3>
+            <p class="text-xs text-slate-400 mb-4 line-clamp-2">Trải nghiệm cung đường đèo cao nhất thế giới và hồ Pangong Tso cùng xe chuyên dụng 4x4.</p>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="text-[10px] text-slate-400">Giá trọn gói từ</div>
+                <div class="text-base font-extrabold text-amber-400">{featuredTour.price?.toLocaleString('vi-VN')} đ</div>
+              </div>
+              <a 
+                href={`/tour/${featuredTour.slug}`} 
+                class="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition"
+              >
+                Khám phá
+              </a>
+            </div>
+          </div>
+        )}
+      </aside>
+    </div>
+  </main>
+</BaseLayout>

@@ -1,0 +1,499 @@
+---
+import AdminLayout from '@/layouts/AdminLayout.astro';
+import MediaPickerEventBridge from '@/components/admin/MediaPickerEventBridge';
+import { env } from 'cloudflare:workers';
+
+const d1Db = env?.ladakh_d1;
+if (!d1Db) return new Response("DB Error", { status: 500 });
+
+const idParam = Astro.url.searchParams.get('id');
+const id = idParam === 'null' ? null : idParam;
+let pageItem: any = null;
+let message = '';
+let isError = false;
+
+// Handle POST Save
+if (Astro.request.method === 'POST') {
+  try {
+    const formData = await Astro.request.formData();
+    const saveId = formData.get('id') as string;
+    const title = formData.get('title') as string;
+    const slug = formData.get('slug') as string;
+    const status = formData.get('status') as string;
+    const featuredImage = formData.get('featuredImage') as string;
+    let raw_content = (formData.get('raw_content') as string) || '';
+    let content = (formData.get('content') as string) || '';
+    const format = formData.get('format') as string;
+    const css_content = formData.get('css_content') as string;
+    const seoTitle = formData.get('seoTitle') as string;
+    const seoDescription = formData.get('seoDescription') as string;
+    const ogImage = formData.get('ogImage') as string;
+    const customSchema = (formData.get('customSchema') as string) || null;
+    const schemaEnabled = formData.get('schemaEnabled') === '1' ? 1 : 0;
+    const updatedBy = (Astro.locals as any)?.user?.id || null;
+    
+    // Manage Astro Native flag via HTML comment
+    if (format === 'astro') {
+      if (!raw_content.includes('<!-- layout: astro -->')) {
+        raw_content = '<!-- layout: astro -->\n' + raw_content;
+      }
+      // Astro Native pages don't have a separate sanitized version, frontend renders `content`
+      content = raw_content;
+    } else {
+      raw_content = raw_content.replace(/<!-- layout: astro -->\n?/g, '');
+      content = content.replace(/<!-- layout: astro -->\n?/g, '');
+    }
+
+    if (saveId) {
+      await d1Db.prepare(`
+        UPDATE Page SET 
+          title=?, slug=?, status=?, 
+          featuredImage=?, raw_content=?, content=?, css_content=?, seoTitle=?, seoDescription=?, ogImage=?,
+          customSchema=?, schemaEnabled=?, schemaUpdatedAt=CURRENT_TIMESTAMP, schemaUpdatedBy=?,
+          updatedAt=CURRENT_TIMESTAMP
+        WHERE id=?
+      `).bind(
+        title, slug, status,
+        featuredImage, raw_content, content, css_content, seoTitle, seoDescription, ogImage,
+        customSchema, schemaEnabled, updatedBy,
+        saveId
+      ).run();
+      message = 'Đã lưu thay đổi thành công!';
+    } else {
+      const newId = crypto.randomUUID();
+      await d1Db.prepare(`
+        INSERT INTO Page (
+          id, title, slug, status, 
+          featuredImage, raw_content, content, css_content, seoTitle, seoDescription, ogImage,
+          customSchema, schemaEnabled, schemaUpdatedAt, schemaUpdatedBy,
+          createdAt, updatedAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).bind(
+        newId, title, slug, status,
+        featuredImage, raw_content, content, css_content, seoTitle, seoDescription, ogImage,
+        customSchema, schemaEnabled, updatedBy
+      ).run();
+      message = 'Đã tạo Trang thành công!';
+      return Astro.redirect(`/admin/pages/edit?id=${newId}`);
+    }
+  } catch (err: any) {
+    message = 'Lỗi lưu: ' + err.message;
+    isError = true;
+  }
+}
+
+if (id) {
+  pageItem = await d1Db.prepare("SELECT * FROM Page WHERE id = ?").bind(id).first<any>();
+}
+if (!pageItem && id) {
+  return new Response("Page not found", { status: 404 });
+}
+
+---
+
+<AdminLayout title={pageItem ? "Sửa Trang" : "Thêm Trang Mới"} activeMenu="pages" hideSidebar={true}>
+  <style>
+    .editor-container { max-width: 1400px; margin: 0 auto; padding: 20px 0; }
+    .header-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
+    .header-title { font-size: 24px; font-weight: 700; color: #0f172a; display: flex; align-items: center; gap: 12px; }
+    .btn-back { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 8px; border: 1px solid #e2e8f0; color: #64748b; background: #fff; cursor: pointer; text-decoration: none; transition: all 0.2s; }
+    .btn-back:hover { background: #f8fafc; color: #0f172a; }
+    .btn-save { background: #2563eb; color: #fff; font-weight: 600; padding: 10px 24px; border-radius: 8px; border: none; cursor: pointer; transition: background 0.2s; }
+    .btn-save:hover { background: #1d4ed8; }
+    
+    .grid-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; align-items: start; }
+    .card { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .card-title { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #f1f5f9; padding-bottom: 12px; }
+    
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 6px; }
+    .form-control { width: 100%; padding: 10px 14px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; color: #0f172a; background: #fff; outline: none; transition: border-color 0.2s; }
+    .form-control:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
+    textarea.form-control { min-height: 100px; resize: vertical; line-height: 1.5; }
+    
+    .dual-editor { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .code-pane { display: flex; flex-direction: column; height: 600px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; }
+    .code-pane-header { background: #f8fafc; padding: 10px 14px; border-bottom: 1px solid #cbd5e1; font-size: 12px; font-weight: 700; color: #475569; display: flex; justify-content: space-between; align-items: center; }
+    .code-pane textarea { flex: 1; width: 100%; border: none; padding: 16px; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; line-height: 1.6; color: #e2e8f0; background: #0f172a; resize: none; outline: none; white-space: pre-wrap; }
+    .badge-raw { background: #fee2e2; color: #ef4444; padding: 2px 8px; border-radius: 12px; font-size: 10px; }
+    .badge-clean { background: #dcfce7; color: #16a34a; padding: 2px 8px; border-radius: 12px; font-size: 10px; }
+
+    .css-editor textarea { font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size: 13px; color: #e2e8f0; background: #1e293b; min-height: 200px; }
+
+    .msg-toast { padding: 12px 16px; border-radius: 8px; margin-bottom: 24px; font-weight: 500; font-size: 14px; }
+    .msg-success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .msg-error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+  </style>
+
+  <div class="editor-container">
+    {message && (
+      <div class={`msg-toast ${isError ? 'msg-error' : 'msg-success'}`}>
+        {message}
+      </div>
+    )}
+
+    <form method="POST" action={`/admin/pages/edit${id ? `?id=${id}` : ''}`}>
+      <input type="hidden" name="id" value={pageItem?.id || ''} />
+      
+      <div class="header-bar">
+        <div class="header-title">
+          <a href="/admin/pages" class="btn-back">←</a>
+          {pageItem ? "Chỉnh sửa Trang" : "Tạo Trang Mới"}
+        </div>
+        <div style="display: flex; gap: 12px;">
+          {pageItem && (
+            <a href={`/${pageItem.slug}`} target="_blank" class="btn-back" style="width: auto; padding: 0 16px; color: #2563eb; font-weight: 600; border-color: #bfdbfe; background: #eff6ff;">Xem thử (Preview)</a>
+          )}
+          <button type="submit" class="btn-save">Lưu Trang</button>
+        </div>
+      </div>
+
+      <div class="grid-layout">
+        <div>
+          <!-- HTML Dual Editor -->
+          <div class="card" style="padding: 0; overflow: hidden; position: relative;">
+            <div id="astroFormatOverlay" style={`position: absolute; inset: 0; background: rgba(255,255,255,0.8); z-index: 10; align-items: center; justify-content: center; backdrop-filter: blur(2px); display: ${pageItem?.raw_content?.includes('<!-- layout: astro -->') ? 'flex' : 'none'};`}>
+              <div style="background: #fee2e2; border: 1px solid #ef4444; color: #991b1b; padding: 16px 24px; border-radius: 8px; font-weight: 600; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                <div style="font-size: 20px; margin-bottom: 8px;">🚀 Trang Astro Native</div>
+                Trang này đã được code giao diện Native. Vui lòng không nhập HTML vào đây.
+              </div>
+            </div>
+            <div class="card-title" style="padding: 16px 24px; margin: 0; background: #f8fafc;">
+              <span>📝 HTML Source Code</span>
+              <span style="font-size: 12px; color: #64748b; font-weight: 400; margin-left: auto;">Trang được Render 100% từ Custom HTML</span>
+            </div>
+            
+            <div class="dual-editor" style="padding: 16px;">
+              <div class="code-pane">
+                <div class="code-pane-header">
+                  <span>RAW CONTENT (Gốc từ WP)</span>
+                  <span class="badge-raw">Nguy Hiểm (XSS)</span>
+                </div>
+                <textarea name="raw_content" spellcheck="false" placeholder="Mã HTML gốc...">{pageItem?.raw_content}</textarea>
+              </div>
+              
+              <div class="code-pane">
+                <div class="code-pane-header">
+                  <span>CLEAN CONTENT (Sanitized)</span>
+                  <span class="badge-clean">An toàn</span>
+                </div>
+                <textarea name="content" spellcheck="false" placeholder="Mã HTML an toàn...">{pageItem?.content}</textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Custom CSS -->
+          <div class="card css-editor">
+            <h3 class="card-title">🎨 Custom CSS (Elementor Styles)</h3>
+            <div class="form-group mb-0">
+              <textarea name="css_content" class="form-control" spellcheck="false" placeholder="CSS dành riêng...">{pageItem?.css_content}</textarea>
+            </div>
+          </div>
+          
+          <div class="card" style="padding: 24px; text-align: center; border: 1px solid #e2e8f0; border-radius: 12px; background: #fafafa;">
+             <button type="button" id="seoBtn" style="width: 100%; padding: 12px; background: #fff; border: 1px solid #3b82f6; color: #3b82f6; border-radius: 8px; cursor: pointer; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; transition: all 0.2s;">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              Tùy chỉnh SEO nâng cao
+            </button>
+          </div>
+
+          <!-- SEO Modal -->
+          <div id="seoModal" style="display: none; position: fixed; inset: 0; background: rgba(15,23,42,0.6); z-index: 1000; align-items: center; justify-content: center;">
+            <div style="background: #fff; border-radius: 16px; width: 90%; max-width: 600px; padding: 32px; position: relative; max-height: 90vh; overflow-y: auto;">
+              <h2 style="margin: 0 0 24px 0; font-size: 20px; font-weight: 700; color: #1e293b;">Tùy chỉnh SEO nâng cao</h2>
+              <button type="button" id="closeSeoBtn" style="position: absolute; top: 24px; right: 24px; background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b;">&times;</button>
+              
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
+                <div style="font-size: 12px; color: #475569; margin-bottom: 12px; font-weight: 600;">Xem trước trên Google Search</div>
+                <div style="background: #fff; padding: 16px; border-radius: 8px; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                  <div style="font-size: 14px; color: #202124; display: flex; align-items: center; gap: 12px; margin-bottom: 4px;">
+                    <div style="width: 28px; height: 28px; background: #e2e8f0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 14px;">🌍</div>
+                    <div>
+                      <div style="line-height: 1.2;">Du Lịch Ladakh - Chuyên Trang Du Lịch Ladakh Bản Địa</div>
+                      <div style="font-size: 12px; color: #4d5156; margin-top: 2px;">https://dulichladakh.com/<span id="preview-slug">{pageItem?.slug || 'slug'}</span></div>
+                    </div>
+                  </div>
+                  <div id="preview-title" style="font-size: 20px; color: #1a0dab; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px; padding-top: 4px;">{pageItem?.seoTitle || pageItem?.title || 'Untitled Page'}</div>
+                  <div id="preview-desc" style="font-size: 14px; color: #4d5156; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.58;">{pageItem?.seoDescription || pageItem?.excerpt || 'Đoạn văn này xuất hiện ở kết quả tìm kiếm Google...'}</div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <label style="margin-bottom: 0;">SEO Title</label>
+                  <span id="title-counter" style="font-size: 12px; color: #64748b;">0 / 60</span>
+                </div>
+                <div style="height: 4px; background: #e2e8f0; border-radius: 2px; margin-bottom: 8px; overflow: hidden;">
+                  <div id="title-progress" style="height: 100%; width: 0%; background: #3b82f6; transition: all 0.3s;"></div>
+                </div>
+                <input type="text" id="seoTitleInput" name="seoTitle" class="form-control" value={pageItem?.seoTitle || ''} placeholder="Để trống sẽ dùng Tên" />
+              </div>
+              
+              <div class="form-group">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                  <label style="margin-bottom: 0;">SEO Description</label>
+                  <span id="desc-counter" style="font-size: 12px; color: #64748b;">0 / 160</span>
+                </div>
+                <div style="height: 4px; background: #e2e8f0; border-radius: 2px; margin-bottom: 8px; overflow: hidden;">
+                  <div id="desc-progress" style="height: 100%; width: 0%; background: #3b82f6; transition: all 0.3s;"></div>
+                </div>
+                <textarea id="seoDescInput" name="seoDescription" class="form-control" rows="3" placeholder="Để trống sẽ dùng Đoạn trích">{pageItem?.seoDescription || ''}</textarea>
+              </div>
+              
+              <div class="form-group">
+                <label>OG Image URL (Ảnh khi share FB/Zalo)</label>
+                <div style="display: flex; gap: 8px;">
+                  <input type="text" id="ogImageInput" name="ogImage" class="form-control" value={pageItem?.ogImage || ''} placeholder="https://..." />
+                  <button type="button" class="btn-back" style="width: auto; padding: 0 16px; flex-shrink: 0;" onclick="window.dispatchEvent(new CustomEvent('open-media-picker', { detail: { inputId: 'ogImageInput' } }))">
+                    Chọn Ảnh
+                  </button>
+                </div>
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; margin-top: 32px;">
+                <button type="button" id="saveSeoBtn" class="btn-save" style="background: #3b82f6;">Xong</button>
+              </div>
+
+              <!-- Custom Schema Section -->
+              <div style="margin-top: 24px; padding-top: 24px; border-top: 1px solid #e2e8f0;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <label style="font-size: 14px; font-weight: 700; color: #0f172a; margin: 0;">🔍 Custom Schema (JSON-LD)</label>
+                  <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #475569; cursor: pointer;">
+                    <input type="checkbox" name="schemaEnabled" value="1" id="schemaEnabledToggle" checked={pageItem?.schemaEnabled !== 0} style="width: 14px; height: 14px;" />
+                    Bật Schema
+                  </label>
+                </div>
+                <p style="font-size: 12px; color: #64748b; margin: 0 0 10px 0;">Schema này sẽ được nhúng vào &lt;head&gt; riêng cho trang này. <a href="/admin/schema#tab-guide" target="_blank" style="color: #2563eb;">Xem ví dụ mẫu →</a></p>
+                <textarea
+                  id="customSchemaInput"
+                  name="customSchema"
+                  rows="10"
+                  style="width: 100%; padding: 12px; font-family: 'Menlo', monospace; font-size: 12px; line-height: 1.5; color: #e2e8f0; background: #0f172a; border: 1px solid #334155; border-radius: 8px; resize: vertical; outline: none;"
+                  placeholder={'{\n  "@context": "https://schema.org",\n  "@type": "AboutPage",\n  ...\n}'}
+                >{pageItem?.customSchema || ''}</textarea>
+                <div id="schemaValidatorResult" style="margin-top: 8px; min-height: 32px; font-size: 12px;"></div>
+                <button type="button" id="btnValidateSchema" style="margin-top: 8px; padding: 6px 14px; background: #fff; border: 1px solid #bfdbfe; color: #2563eb; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600;">🔍 Validate JSON-LD</button>
+                {pageItem?.schemaUpdatedAt && (
+                  <p style="font-size: 11px; color: #94a3b8; margin-top: 8px;">Cập nhật lần cuối: {new Date(pageItem.schemaUpdatedAt).toLocaleString('vi-VN')}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <h3 class="card-title">⚙️ Cài đặt Cơ bản</h3>
+            <div class="form-group">
+              <label>Tên Trang</label>
+              <input type="text" name="title" class="form-control" value={pageItem?.title || ''} required />
+            </div>
+            <div class="form-group">
+              <label>Đường dẫn (Slug)</label>
+              <input type="text" name="slug" class="form-control" value={pageItem?.slug || ''} required />
+            </div>
+            <div class="form-group">
+              <label>Trạng thái</label>
+              <select name="status" class="form-control">
+                <option value="published" selected={pageItem?.status === 'published'}>Đã xuất bản</option>
+                <option value="draft" selected={pageItem?.status === 'draft'}>Bản nháp</option>
+                <option value="trash" selected={pageItem?.status === 'trash'}>Thùng rác</option>
+              </select>
+            </div>
+            
+            <div class="form-group" style="margin-bottom: 0px; padding: 12px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; margin-top: 24px;">
+              <label style="margin-bottom: 8px; color: #1e3a8a; font-weight: 700;">Định dạng trang (Render Mode)</label>
+              <div style="display: flex; gap: 16px; align-items: center;">
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500; color: #334155; margin: 0;">
+                  <input type="radio" name="format" value="elementor" checked={!pageItem?.raw_content?.includes('<!-- layout: astro -->')} style="width: 16px; height: 16px;" onchange="toggleFormatOverlay('elementor')" />
+                  Elementor HTML
+                </label>
+                <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-weight: 500; color: #334155; margin: 0;">
+                  <input type="radio" name="format" value="astro" checked={pageItem?.raw_content?.includes('<!-- layout: astro -->')} style="width: 16px; height: 16px;" onchange="toggleFormatOverlay('astro')" />
+                  Astro Native 🚀
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 class="card-title">🖼️ Hình ảnh</h3>
+            <div class="form-group" style="margin-bottom: 24px;">
+              <label style="font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 12px;">Featured Image</label>
+              <div style="position: relative; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; overflow: hidden; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: border-color 0.2s;" onmouseover="this.style.borderColor='#3b82f6'" onmouseout="this.style.borderColor='#cbd5e1'" onclick="window.dispatchEvent(new CustomEvent('open-media-picker', { detail: { inputId: 'featuredImageInput', previewId: 'featuredImagePreview', placeholderId: 'featuredImagePlaceholder' } }))">
+                
+                <img id="featuredImagePreview" src={pageItem?.featuredImage || ''} style={`position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: ${pageItem?.featuredImage ? 'block' : 'none'};`} />
+                
+                <div id="featuredImagePlaceholder" style={`text-align: center; color: #94a3b8; display: ${pageItem?.featuredImage ? 'none' : 'block'};`}>
+                  <svg style="margin: 0 auto 8px auto;" width="32" height="32" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2-2v12a2 2 0 002 2z"></path></svg>
+                  <div style="font-size: 13px; font-weight: 500;">Nhấn để chọn ảnh</div>
+                </div>
+              </div>
+              <input type="hidden" id="featuredImageInput" name="featuredImage" value={pageItem?.featuredImage || ''} />
+              <button type="button" onclick="document.getElementById('featuredImageInput').value=''; document.getElementById('featuredImagePreview').style.display='none'; document.getElementById('featuredImagePlaceholder').style.display='block';" style="position: absolute; top: 12px; right: 12px; background: #ef4444; color: #fff; border: none; width: 24px; height: 24px; border-radius: 50%; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10;">&times;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <script is:inline>
+    // Format toggle logic
+    function toggleFormatOverlay(format) {
+      const overlay = document.getElementById('astroFormatOverlay');
+      if (overlay) {
+        overlay.style.display = format === 'astro' ? 'flex' : 'none';
+      }
+    }
+
+    const seoBtn = document.getElementById('seoBtn');
+    const seoModal = document.getElementById('seoModal');
+    const closeSeoBtn = document.getElementById('closeSeoBtn');
+    const saveSeoBtn = document.getElementById('saveSeoBtn');
+
+    if (seoBtn && seoModal) {
+      seoBtn.addEventListener('click', () => seoModal.style.display = 'flex');
+      closeSeoBtn.addEventListener('click', () => seoModal.style.display = 'none');
+      saveSeoBtn.addEventListener('click', () => seoModal.style.display = 'none');
+    }
+
+    const seoTitleInput = document.getElementById('seoTitleInput');
+    const seoDescInput = document.getElementById('seoDescInput');
+    const titleInput = document.querySelector('input[name="title"]');
+    const slugInput = document.querySelector('input[name="slug"]');
+    
+    const previewTitle = document.getElementById('preview-title');
+    const previewDesc = document.getElementById('preview-desc');
+    const previewSlug = document.getElementById('preview-slug');
+    
+    const titleCounter = document.getElementById('title-counter');
+    const descCounter = document.getElementById('desc-counter');
+    const titleProgress = document.getElementById('title-progress');
+    const descProgress = document.getElementById('desc-progress');
+
+    function updateSeo() {
+      const currentTitle = seoTitleInput.value || titleInput.value || 'Untitled';
+      const currentDesc = seoDescInput.value || 'Đoạn văn này xuất hiện ở kết quả tìm kiếm Google...';
+      const currentSlug = slugInput.value || 'slug';
+
+      previewTitle.textContent = currentTitle;
+      previewDesc.textContent = currentDesc;
+      previewSlug.textContent = currentSlug;
+
+      const titleLen = currentTitle.length;
+      titleCounter.textContent = `${titleLen} / 60`;
+      let titlePct = (titleLen / 60) * 100;
+      if (titlePct > 100) titlePct = 100;
+      titleProgress.style.width = `${titlePct}%`;
+      if (titleLen < 30 || titleLen > 60) {
+        titleProgress.style.background = '#eab308';
+        if(titleLen > 65) titleProgress.style.background = '#ef4444';
+      } else {
+        titleProgress.style.background = '#22c55e';
+      }
+
+      const descLen = currentDesc.length;
+      descCounter.textContent = `${descLen} / 160`;
+      let descPct = (descLen / 160) * 100;
+      if (descPct > 100) descPct = 100;
+      descProgress.style.width = `${descPct}%`;
+      if (descLen < 120 || descLen > 160) {
+        descProgress.style.background = '#eab308';
+        if(descLen > 165) descProgress.style.background = '#ef4444';
+      } else {
+        descProgress.style.background = '#22c55e';
+      }
+    }
+
+    if(seoTitleInput) {
+      seoTitleInput.addEventListener('input', updateSeo);
+      seoDescInput.addEventListener('input', updateSeo);
+      titleInput.addEventListener('input', updateSeo);
+      slugInput.addEventListener('input', updateSeo);
+      updateSeo();
+    }
+
+    // Auto-slug logic
+    let userEditedSlug = slugInput && slugInput.value.trim().length > 0;
+    if (slugInput) {
+      slugInput.addEventListener('input', () => {
+        userEditedSlug = true;
+      });
+    }
+
+    if (titleInput && slugInput) {
+      titleInput.addEventListener('input', () => {
+        if (!userEditedSlug) {
+          const text = titleInput.value;
+          const slug = text.normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/đ/g, 'd').replace(/Đ/g, 'D')
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+          slugInput.value = slug;
+          if(typeof updateSeo === 'function') updateSeo();
+        }
+      });
+    }
+
+    // ── 3-Tier JSON-LD Validator for Custom Schema ────────────────────────
+    const GOOGLE_REQUIRED = {
+      Article: ['headline','image','datePublished','author'],
+      BlogPosting: ['headline','image','datePublished','author'],
+      FAQPage: ['mainEntity'], Organization: ['name','url'],
+      TravelAgency: ['name','url'], WebSite: ['name','url'],
+      Person: ['name'], AboutPage: ['name'], WebPage: ['name'],
+    };
+    function validateJsonLd(raw) {
+      const r = { valid: false, errors: [], warnings: [] };
+      if (!raw || !raw.trim()) { r.valid = true; return r; }
+      let parsed;
+      try { parsed = JSON.parse(raw.trim()); } catch(e) {
+        r.errors.push('❌ Level 1 — JSON không hợp lệ: ' + e.message.replace(/at position \d+/,'').trim());
+        return r;
+      }
+      const nodes = Array.isArray(parsed['@graph']) ? parsed['@graph'] : [parsed];
+      if (!parsed['@context']) {
+        r.errors.push('❌ Level 2 — Thiếu "@context". Google sẽ bỏ qua Schema này.');
+        return r;
+      }
+      if (!nodes.some(n => n['@type'])) {
+        r.errors.push('❌ Level 2 — Thiếu "@type".');
+        return r;
+      }
+      for (const node of nodes) {
+        const req = GOOGLE_REQUIRED[node['@type']];
+        if (req) req.forEach(f => { if (!node[f]) r.warnings.push(`⚠️ "${node['@type']}" thiếu "${f}" (Google khuyến nghị)`); });
+      }
+      r.valid = true;
+      return r;
+    }
+    function showValidation(containerId, raw) {
+      const el = document.getElementById(containerId);
+      if (!el) return true;
+      const r = validateJsonLd(raw);
+      const html = [
+        ...r.errors.map(e => `<div style="color:#dc2626">${e}</div>`),
+        ...r.warnings.map(w => `<div style="color:#d97706">${w}</div>`),
+        r.valid ? `<div style="color:#16a34a;font-weight:600;">${r.warnings.length ? '✅ Hợp lệ (có warning ở trên)' : '✅ JSON-LD hợp lệ — Sẵn sàng cho Google'}</div>` : ''
+      ].join('');
+      el.innerHTML = html;
+      return r.valid;
+    }
+    const btnVS = document.getElementById('btnValidateSchema');
+    const schemaTA = document.getElementById('customSchemaInput');
+    if (btnVS && schemaTA) {
+      btnVS.addEventListener('click', () => showValidation('schemaValidatorResult', schemaTA.value));
+      document.querySelector('form')?.addEventListener('submit', (e) => {
+        if (!showValidation('schemaValidatorResult', schemaTA.value)) {
+          e.preventDefault();
+          schemaTA.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      });
+    }
+  </script>
+
+  <MediaPickerEventBridge client:only="react" />
+</AdminLayout>

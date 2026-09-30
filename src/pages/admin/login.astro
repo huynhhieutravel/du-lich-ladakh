@@ -1,0 +1,114 @@
+---
+import { verifyToken } from '../../lib/auth';
+
+export const prerender = false;
+
+const token = Astro.cookies.get('ladakh_admin_token')?.value;
+if (token) {
+  const user = await verifyToken(token);
+  if (user) {
+    return Astro.redirect('/admin');
+  }
+}
+---
+
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đăng Nhập Quản Trị | Du Lịch Ladakh CMS</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Plus Jakarta Sans', sans-serif; box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0f172a; color: #f8fafc; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 20px; }
+    .login-card { background: #1e293b; width: 100%; max-width: 420px; padding: 40px; border-radius: 20px; border: 1px solid #334155; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5); }
+    .brand { text-align: center; margin-bottom: 30px; }
+    .logo-badge { width: 52px; height: 52px; background: linear-gradient(135deg, #f59e0b, #3b82f6); border-radius: 14px; display: inline-flex; align-items: center; justify-content: center; font-size: 24px; font-weight: 800; color: #fff; margin-bottom: 12px; shadow: 0 10px 15px -3px rgba(245, 158, 11, 0.3); }
+    .brand h1 { font-size: 20px; font-weight: 700; color: #fff; }
+    .brand p { font-size: 12px; color: #94a3b8; margin-top: 4px; }
+    .form-group { margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 13px; font-weight: 600; color: #cbd5e1; margin-bottom: 8px; }
+    .form-group input { width: 100%; padding: 12px 16px; border: 1px solid #334155; border-radius: 10px; font-size: 14px; outline: none; background: #0f172a; color: #fff; transition: border-color 0.2s, box-shadow 0.2s; }
+    .form-group input:focus { border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.15); }
+    .btn-login { width: 100%; padding: 13px; background: linear-gradient(135deg, #f59e0b, #d97706); color: #0f172a; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; transition: transform 0.15s, opacity 0.2s; margin-top: 8px; }
+    .btn-login:hover { opacity: 0.95; transform: translateY(-1px); }
+    .btn-login:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+    .error-alert { background: #451a1a; border: 1px solid #7f1d1d; color: #fca5a5; padding: 12px; border-radius: 10px; font-size: 13px; font-weight: 500; margin-bottom: 20px; text-align: center; display: none; }
+    .error-alert.show { display: block; }
+    .credentials-hint { margin-top: 24px; padding: 12px; background: #0f172a/60; border: 1px dashed #334155; border-radius: 10px; font-size: 12px; color: #94a3b8; text-align: center; line-height: 1.6; }
+    .credentials-hint strong { color: #f59e0b; }
+  </style>
+</head>
+<body>
+
+  <div class="login-card">
+    <div class="brand">
+      <div class="logo-badge">L</div>
+      <h1>Du Lịch Ladakh CMS</h1>
+      <p>Hệ Thống Quản Trị Nội Dung & Tour Du Lịch</p>
+    </div>
+
+    <div id="errorBox" class="error-alert"></div>
+
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="username">Tên đăng nhập hoặc Email</label>
+        <input type="text" id="username" name="username" required autocomplete="username" placeholder="admin" autofocus />
+      </div>
+
+      <div class="form-group">
+        <label for="password">Mật khẩu</label>
+        <input type="password" id="password" name="password" required autocomplete="current-password" placeholder="••••••••" />
+      </div>
+
+      <button type="submit" id="submitBtn" class="btn-login">Đăng Nhập Quản Trị</button>
+    </form>
+
+    <div class="credentials-hint">
+      Tài khoản mặc định: <strong>admin</strong><br />
+      Mật khẩu: <strong>admin@ladakh2026</strong>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('loginForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const errorBox = document.getElementById('errorBox');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+
+      errorBox.classList.remove('show');
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Đang xác thực...';
+
+      try {
+        const res = await fetch('/api/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          window.location.href = data.redirectUrl || '/admin';
+        } else {
+          errorBox.textContent = data.message || 'Đăng nhập thất bại';
+          errorBox.classList.add('show');
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Đăng Nhập Quản Trị';
+        }
+      } catch (err) {
+        errorBox.textContent = 'Lỗi kết nối máy chủ.';
+        errorBox.classList.add('show');
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Đăng Nhập Quản Trị';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,533 @@
+---
+import AdminLayout from '@/layouts/AdminLayout.astro';
+import { env } from 'cloudflare:workers';
+
+export const prerender = false;
+
+const d1Db = (env as any)?.ladakh_d1;
+let links: any[] = [];
+
+if (d1Db) {
+  try {
+    const { results } = await d1Db.prepare("SELECT * FROM Link ORDER BY createdAt DESC").all();
+    links = results || [];
+  } catch (e) {
+    console.error("Error fetching links:", e);
+  }
+}
+---
+
+<AdminLayout title="Link Manager (Short URLs)" activeMenu="links">
+  <style>
+    .page-header { margin-bottom: 24px; }
+    .page-title { font-size: 24px; font-weight: 700; color: #0f172a; }
+    
+    .link-manager-grid {
+      display: grid;
+      grid-template-columns: 360px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    @media (max-width: 1024px) {
+      .link-manager-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid #e2e8f0;
+      padding: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .card-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #f1f5f9;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #475569;
+      margin-bottom: 6px;
+    }
+    .form-control {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #0f172a;
+      background: #fff;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .form-control:focus {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+
+    .slug-input-wrapper {
+      display: flex;
+      align-items: stretch;
+    }
+    .slug-prefix {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-right: none;
+      border-radius: 8px 0 0 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      color: #64748b;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      white-space: nowrap;
+    }
+    .slug-input-wrapper input {
+      border-radius: 0 8px 8px 0;
+    }
+
+    .btn-save {
+      background: #2563eb;
+      color: #fff;
+      font-weight: 600;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.2s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn-save:hover { background: #1d4ed8; }
+    .btn-save:disabled { background: #94a3b8; cursor: not-allowed; }
+
+    .btn-cancel {
+      background: #f1f5f9;
+      color: #475569;
+      font-weight: 600;
+      padding: 10px 20px;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-cancel:hover { background: #e2e8f0; color: #0f172a; }
+
+    /* Table styles */
+    .links-table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+    .links-table th {
+      padding: 12px 16px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #475569;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .links-table td {
+      padding: 16px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 13.5px;
+      color: #334155;
+      vertical-align: top;
+    }
+    .links-table tr:hover td {
+      background: #f8fafc;
+    }
+
+    .link-label { font-weight: 600; color: #0f172a; margin-bottom: 4px; }
+    .link-slug {
+      font-size: 12.5px;
+      font-family: 'Menlo', 'Monaco', monospace;
+      color: #64748b;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-copy {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 2px 4px;
+      border-radius: 4px;
+      font-size: 13px;
+      line-height: 1;
+      transition: background 0.15s;
+    }
+    .btn-copy:hover { background: #e2e8f0; }
+
+    .link-dest {
+      color: #2563eb;
+      text-decoration: none;
+      word-break: break-all;
+      max-width: 300px;
+      display: inline-block;
+    }
+    .link-dest:hover { text-decoration: underline; }
+
+    .badge-status {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-active { background: #dcfce7; color: #15803d; }
+    .badge-inactive { background: #f1f5f9; color: #64748b; }
+
+    .btn-action {
+      background: none;
+      border: none;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 2px 6px;
+    }
+    .btn-action.edit { color: #2563eb; }
+    .btn-action.edit:hover { text-decoration: underline; }
+    .btn-action.delete { color: #dc2626; }
+    .btn-action.delete:hover { text-decoration: underline; }
+
+    /* Toast */
+    .toast-msg {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      background: #0f172a;
+      color: #fff;
+      border-radius: 8px;
+      font-size: 13.5px;
+      font-weight: 500;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3);
+      z-index: 1000;
+      display: none;
+      align-items: center;
+      gap: 8px;
+      animation: fadeIn 0.2s ease;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+
+  <div class="page-header">
+    <h1 class="page-title">Link Manager (Short URLs)</h1>
+  </div>
+
+  <div class="link-manager-grid">
+    <!-- CỘT TRÁI: FORM THÊM / SỬA LINK -->
+    <div class="card" id="formCard">
+      <h2 class="card-title" id="formTitle">Thêm Link Mới</h2>
+      
+      <form id="linkForm">
+        <div class="form-group">
+          <label for="labelInput">Tên hiển thị (Label) *</label>
+          <input type="text" id="labelInput" name="label" class="form-control" placeholder="Ví dụ: Facebook Chính" required />
+        </div>
+
+        <div class="form-group">
+          <label for="slugInput">Đường dẫn tắt (Slug) *</label>
+          <div class="slug-input-wrapper">
+            <span class="slug-prefix">dulichladakh.com/</span>
+            <input type="text" id="slugInput" name="slug" class="form-control" placeholder="facebook" required />
+          </div>
+          <div style="font-size: 11.5px; color: #94a3b8; margin-top: 4px;">Ví dụ: dulichladakh.com/facebook</div>
+        </div>
+
+        <div class="form-group">
+          <label for="urlInput">URL Đích (Bắt buộc dùng http/https) *</label>
+          <input type="text" id="urlInput" name="url" class="form-control" placeholder="https://facebook.com/dulichladakh" required />
+        </div>
+
+        <div class="form-group">
+          <label for="statusCodeInput">Chuyển hướng</label>
+          <select id="statusCodeInput" name="statusCode" class="form-control">
+            <option value="302" selected>302 (Found - Tạm thời, Marketing)</option>
+            <option value="301">301 (Moved Permanently - Vĩnh viễn, SEO)</option>
+            <option value="307">307 (Temporary Redirect)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="targetInput">Thẻ Target</label>
+          <select id="targetInput" name="target" class="form-control">
+            <option value="_blank" selected>_blank (Mở tab mới)</option>
+            <option value="_self">_self (Tab hiện tại)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="relInput">Thẻ Rel (SEO)</label>
+          <input type="text" id="relInput" name="rel" class="form-control" value="nofollow sponsored" />
+        </div>
+
+        <div class="form-group" style="margin-bottom: 24px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13.5px; font-weight: 500; color: #0f172a; margin: 0;">
+            <input type="checkbox" id="isActiveInput" name="isActive" value="1" checked style="width: 16px; height: 16px; accent-color: #2563eb;" />
+            Kích hoạt (Cho phép redirect)
+          </label>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+          <button type="submit" id="submitBtn" class="btn-save" style="width: 100%;">Tạo Link</button>
+          <button type="button" id="cancelBtn" class="btn-cancel" style="width: 100%; display: none;">Hủy bỏ</button>
+        </div>
+      </form>
+    </div>
+
+    <!-- CỘT PHẢI: BẢNG DANH SÁCH LINK -->
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <div style="overflow-x: auto;">
+        <table class="links-table">
+          <thead>
+            <tr>
+              <th style="min-width: 200px;">Tên Link &amp; Slug</th>
+              <th style="min-width: 220px;">URL Đích</th>
+              <th style="min-width: 140px;">Cấu hình SEO</th>
+              <th style="min-width: 100px;">Trạng Thái</th>
+              <th style="min-width: 90px; text-align: right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {links && links.length > 0 ? (
+              links.map((link) => (
+                <tr id={`row-${link.slug}`}>
+                  <td>
+                    <div class="link-label">{link.label}</div>
+                    <div class="link-slug">
+                      <span>/{link.slug}</span>
+                      <button 
+                        type="button" 
+                        class="btn-copy" 
+                        onclick={`copyShortUrl('${link.slug}')`}
+                        title="Sao chép link"
+                      >
+                        📋
+                      </button>
+                    </div>
+                  </td>
+                  <td>
+                    <a href={link.url} target="_blank" rel="noopener noreferrer" class="link-dest" title={link.url}>
+                      {link.url}
+                    </a>
+                  </td>
+                  <td>
+                    <div style="font-weight: 500; color: #334155;">{link.statusCode} | {link.target}</div>
+                    <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">{link.rel}</div>
+                  </td>
+                  <td>
+                    <span class={`badge-status ${link.isActive ? 'badge-active' : 'badge-inactive'}`}>
+                      {link.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td style="text-align: right; white-space: nowrap;">
+                    <button 
+                      type="button" 
+                      class="btn-action edit" 
+                      onclick={`editLink(${JSON.stringify(link)})`}
+                    >
+                      Sửa
+                    </button>
+                    <span style="color: #cbd5e1; margin: 0 4px;">|</span>
+                    <button 
+                      type="button" 
+                      class="btn-action delete" 
+                      onclick={`deleteLink('${link.slug}', '${link.label.replace(/'/g, "\\'")}')`}
+                    >
+                      Xóa
+                    </button>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colspan="5" style="text-align: center; padding: 48px 16px; color: #64748b;">
+                  <div style="font-size: 32px; margin-bottom: 8px;">🔗</div>
+                  <div style="font-weight: 600; color: #0f172a; margin-bottom: 4px;">Chưa có link rút gọn nào</div>
+                  <div style="font-size: 13px;">Hãy tạo đường dẫn tắt đầu tiên bằng biểu mẫu bên trái.</div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast-msg"></div>
+
+  <script is:inline>
+    let editingSlug = null;
+    const form = document.getElementById('linkForm');
+    const formTitle = document.getElementById('formTitle');
+    const submitBtn = document.getElementById('submitBtn');
+    const cancelBtn = document.getElementById('cancelBtn');
+    
+    const labelInput = document.getElementById('labelInput');
+    const slugInput = document.getElementById('slugInput');
+    const urlInput = document.getElementById('urlInput');
+    const statusCodeInput = document.getElementById('statusCodeInput');
+    const targetInput = document.getElementById('targetInput');
+    const relInput = document.getElementById('relInput');
+    const isActiveInput = document.getElementById('isActiveInput');
+    const toast = document.getElementById('toast');
+
+    function showToast(msg) {
+      if (!toast) return;
+      toast.textContent = msg;
+      toast.style.display = 'flex';
+      setTimeout(() => {
+        toast.style.display = 'none';
+      }, 3000);
+    }
+
+    function copyShortUrl(slug) {
+      const fullUrl = `${window.location.origin}/${slug}`;
+      navigator.clipboard.writeText(fullUrl).then(() => {
+        showToast(`Đã sao chép: ${fullUrl}`);
+      }).catch(() => {
+        showToast('Không thể sao chép vào bộ nhớ tạm');
+      });
+    }
+    window.copyShortUrl = copyShortUrl;
+
+    function editLink(link) {
+      editingSlug = link.slug;
+      formTitle.textContent = `Sửa Link: /${link.slug}`;
+      labelInput.value = link.label || '';
+      slugInput.value = link.slug || '';
+      slugInput.disabled = true;
+      urlInput.value = link.url || '';
+      statusCodeInput.value = String(link.statusCode || 302);
+      targetInput.value = link.target || '_blank';
+      relInput.value = link.rel || 'nofollow sponsored';
+      isActiveInput.checked = Boolean(link.isActive);
+      
+      submitBtn.textContent = 'Cập nhật Link';
+      cancelBtn.style.display = 'block';
+      
+      document.getElementById('formCard')?.scrollIntoView({ behavior: 'smooth' });
+      labelInput.focus();
+    }
+    window.editLink = editLink;
+
+    function resetForm() {
+      editingSlug = null;
+      formTitle.textContent = 'Thêm Link Mới';
+      form.reset();
+      slugInput.disabled = false;
+      statusCodeInput.value = '302';
+      targetInput.value = '_blank';
+      relInput.value = 'nofollow sponsored';
+      isActiveInput.checked = true;
+      submitBtn.textContent = 'Tạo Link';
+      cancelBtn.style.display = 'none';
+    }
+
+    if (cancelBtn) {
+      cancelBtn.addEventListener('click', resetForm);
+    }
+
+    if (form) {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        submitBtn.disabled = true;
+
+        const payload = {
+          label: labelInput.value.trim(),
+          slug: slugInput.value.trim(),
+          url: urlInput.value.trim(),
+          statusCode: parseInt(statusCodeInput.value, 10),
+          target: targetInput.value,
+          rel: relInput.value.trim(),
+          isActive: isActiveInput.checked
+        };
+
+        const method = editingSlug ? 'PATCH' : 'POST';
+        if (editingSlug) {
+          payload.slug = editingSlug;
+        }
+
+        try {
+          const res = await fetch('/api/admin/links', {
+            method,
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await res.json();
+
+          if (res.ok && data.success) {
+            showToast(editingSlug ? 'Đã cập nhật link!' : 'Đã tạo link thành công!');
+            setTimeout(() => {
+              window.location.reload();
+            }, 500);
+          } else {
+            alert(data.error || 'Có lỗi xảy ra, vui lòng thử lại.');
+            submitBtn.disabled = false;
+          }
+        } catch (err) {
+          alert('Lỗi kết nối máy chủ: ' + err.message);
+          submitBtn.disabled = false;
+        }
+      });
+    }
+
+    async function deleteLink(slug, label) {
+      if (!confirm(`Bạn có chắc chắn muốn xóa link "${label}" (/${slug}) không?`)) {
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/admin/links', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ slug })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          showToast('Đã xóa link thành công!');
+          const row = document.getElementById(`row-${slug}`);
+          if (row) {
+            row.style.opacity = '0';
+            row.style.transition = 'opacity 0.3s';
+            setTimeout(() => row.remove(), 300);
+          } else {
+            window.location.reload();
+          }
+        } else {
+          alert(data.error || 'Không thể xóa link.');
+        }
+      } catch (err) {
+        alert('Lỗi kết nối: ' + err.message);
+      }
+    }
+    window.deleteLink = deleteLink;
+  </script>
+</AdminLayout>
